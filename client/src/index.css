@@ -1,0 +1,381 @@
+/* General body styling */
+body {
+  background: linear-gradient(to bottom right, #FCF5EB 0%, #F8E7D4 100%);
+  /* Soft parchment-like gradient */
+  font-family: 'Lora', serif;
+  /* Classic, readable serif font for body */
+  color: #3F3F3F;
+  /* Deeper charcoal text for readability */
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  /* Ensure body takes full viewport height */
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  /* Prevent horizontal scrolling */
+}
+
+/* App container */
+.book-theme-app {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header styling */
+.book-theme-header {
+  background-color: #5A4434;
+  /* Richer dark brown header */
+  color: #FDF8ED;
+  /* Creamy text */
+  padding: 1.5rem 0;
+  /* More vertical padding */
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+  /* Deeper, softer shadow */
+  border-bottom-left-radius: 20px;
+  /* More pronounced rounded corners */
+  border-bottom-right-radius: 20px;
+  position: sticky;
+  /* Make header sticky */
+  top: 0;
+  z-index: 1000;
+  /* Ensure header stays on top */
+  border-bottom: 2px solid #8B6B4D;
+  /* Subtle bottom border for definition */
+}
+
+.book-theme-heading {
+  font-family: 'Merriweather', serif;
+  /* Serif font for headings */
+  color: #FDF8ED;
+  font-size: 3rem;
+  /* Larger, more impactful default font size */
+  margin-bottom: 1rem;
+  /* Adjusted margin */
+  letter-spacing: 0.08em;
+  /* More pronounced letter spacing */
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.4);
+  /* Stronger text shadow */
+  font-weight: 700;
+  /* Bolder heading */
+}
+
+/* Responsive font size for heading */
+@media (max-width: 768px) {
+  .book-theme-heading {
+    font-size: 2.5rem;
+    /* Smaller font size on tablets/mobiles */
+  }
+}
+
+@media (max-width: 480px) {
+  .book-theme-heading {
+    font-size: 2rem;
+    /* Even smaller font size on very small mobiles */
+    letter-spacing: 0.05em;
+  }
+}
+
+/* Navigation links */
+.book-theme-link {
+  color: #FDF8ED !important;
+  /* Creamy color for header links */
+  text-decoration: none !important;
+  font-family: 'Lora', serif;
+  /* Consistent classic font */
+  font-weight: 600;
+  /* Bolder */
+  transition: color 0.3s ease, background-color 0.3s ease, transform 0.2s ease;
+  /* Smooth transition for hover */
+  padding: 0.6rem 1rem;
+  /* More padding for larger click area */
+  border-radius: 8px;
+  /* Rounded corners for links */
+  text-shadow: 0.5px 0.5px 1px rgba(0, 0, 0, 0.2);
+  /* Subtle text shadow on links */
+}
+
+.book-theme-link:hover {
+  color: #FFECB3 !important;
+  /* Lighter cream/gold on hover */
+  background-color: rgba(255, 255, 255, 0.15);
+  /* More visible background on hover */
+  transform: translateY(-3px);
+  /* More pronounced lift effect */
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  /* Subtle shadow on hover */
+}
+
+/* Main content area */
+.book-theme-main {
+  flex-grow: 1;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  /* Align forms to the top */
+  padding: 4rem 2rem;
+  /* Increased general padding for main content */
+}
+
+/* Form container styling - Central to responsive forms */
+.book-form-container {
+  background-color: #FFFAF0;
+  /* Very light creamy background for forms, like thick paper */
+  border: 2px solid #D7C4A5;
+  /* More prominent, aged border */
+  border-radius: 15px;
+  /* More rounded corners */
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.25);
+  /* Deeper, more atmospheric shadow */
+  max-width: 600px;
+  /* Wider default max-width for desktop */
+  width: 100%;
+  /* Ensures it takes full width on smaller screens */
+  padding: 3rem;
+  /* Increased default padding for desktop */
+  margin: 3rem auto;
+  /* Center the container with vertical margin */
+  transition: all 0.4s ease-in-out;
+  /* Smooth transitions for responsiveness and hover */
+  position: relative;
+  /* For possible pseudo-elements */
+  overflow: hidden;
+  /* Clip internal shadows/borders */
+}
+
+/* Subtle inner shadow or border effect for more depth */
+.book-form-container::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  border: 1px dashed rgba(139, 107, 77, 0.3);
+  /* Aged paper border */
+  border-radius: 12px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Responsive adjustments for book-form-container */
+@media (max-width: 768px) {
+  .book-form-container {
+    max-width: 95%;
+    /* Larger max-width on tablets */
+    padding: 2.5rem;
+    /* Adjusted padding */
+    margin: 2.5rem auto;
+  }
+
+  .book-form-container::before {
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .book-form-container {
+    max-width: 98%;
+    /* Almost full width on very small mobiles */
+    padding: 2rem;
+    /* Reduced padding */
+    margin: 2rem auto;
+  }
+
+  .book-form-container::before {
+    top: 5px;
+    left: 5px;
+    right: 5px;
+    bottom: 5px;
+  }
+}
+
+
+/* Form specific elements */
+.book-form-title {
+  font-family: 'Merriweather', serif;
+  color: #6C5441;
+  font-size: 2.5rem;
+  /* Adjusted font size */
+  margin-bottom: 2.5rem;
+  /* Increased margin */
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.15);
+  font-weight: 700;
+}
+
+.book-form-label {
+  font-family: 'Lora', serif;
+  /* Consistent classic font */
+  color: #5A4434;
+  /* Deeper brown for labels */
+  font-weight: 600;
+  /* Bolder labels */
+  margin-bottom: 0.6rem;
+  /* More space between label and control */
+  font-size: 1.05rem;
+  /* Slightly larger label font */
+}
+
+.book-form-control {
+  border-radius: 10px;
+  /* More rounded input fields */
+  border: 1px solid #B0A08D;
+  /* Softer border color */
+  padding: 1rem 1.25rem;
+  /* More padding inside inputs */
+  font-size: 1.1rem;
+  /* Larger text in inputs */
+  color: #4A4A4A;
+  background-color: #FDFBF5;
+  /* Very light background for inputs */
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, background-color 0.3s ease;
+  /* Smooth transitions */
+}
+
+.book-form-control:focus {
+  border-color: #6C5441;
+  /* Darker brown on focus */
+  box-shadow: 0 0 0 0.4rem rgba(108, 84, 65, 0.4);
+  /* More prominent, cohesive shadow on focus */
+  background-color: #FFFFFF;
+  /* White on focus for contrast */
+  outline: none;
+  /* Remove default outline */
+}
+
+.book-form-button {
+  background: linear-gradient(to right, #6C5441, #5A4434);
+  /* Gradient for buttons */
+  border-color: #5A4434;
+  border-radius: 10px;
+  /* More rounded buttons */
+  font-family: 'Merriweather', serif;
+  /* Headings font for buttons */
+  font-weight: 700;
+  /* Bolder button text */
+  padding: 1rem 1.75rem;
+  /* More padding for buttons */
+  font-size: 1.2rem;
+  /* Larger button text */
+  transition: background 0.3s ease, border-color 0.3s ease, transform 0.15s ease, box-shadow 0.25s ease;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+  /* Stronger button shadow */
+  color: #FDF8ED;
+  /* Creamy text */
+}
+
+.book-form-button:hover {
+  background: linear-gradient(to right, #5A4434, #6C5441);
+  /* Reverse gradient on hover */
+  border-color: #6C5441;
+  transform: translateY(-4px);
+  /* More pronounced lift effect */
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.35);
+  /* Stronger shadow on hover */
+}
+
+.book-form-button:active {
+  transform: translateY(0);
+  /* Return to original position */
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  /* Reduced shadow on active */
+  background: #5A4434;
+  /* Solid darker brown on active */
+}
+
+/* Danger Button Specific (for Delete Account) */
+.book-form-button.btn-danger {
+  background: linear-gradient(to right, #B22222, #8B0000);
+  /* Darker red gradient for danger */
+  border-color: #8B0000;
+}
+
+.book-form-button.btn-danger:hover {
+  background: linear-gradient(to right, #8B0000, #B22222);
+  border-color: #B22222;
+}
+
+
+/* Alert styling for messages */
+.alert {
+  border-radius: 10px;
+  font-weight: 500;
+  text-align: center;
+  padding: 1.2rem;
+  font-size: 1.05rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.alert-success {
+  background-color: #E6F3E6;
+  /* Lighter green */
+  color: #285A3F;
+  /* Deeper green text */
+  border-color: #BEE5BE;
+}
+
+.alert-danger {
+  background-color: #FCE8E6;
+  /* Lighter red */
+  color: #8C2F39;
+  /* Deeper red text */
+  border-color: #F5C2C0;
+}
+
+.alert-info {
+  background-color: #EAF7FC;
+  /* Lighter blue */
+  color: #2F6B8A;
+  /* Deeper blue text */
+  border-color: #BFECFA;
+}
+
+
+.book-form-text {
+  font-family: 'Lora', serif;
+  /* Consistent body font */
+  color: #4A4A4A;
+  line-height: 1.7;
+  /* Improved readability */
+  font-size: 1.05rem;
+  /* Slightly larger body text */
+}
+
+.book-form-link {
+  color: #8B6B4D !important;
+  /* Slightly more vibrant brown for links */
+  text-decoration: underline !important;
+  font-weight: 700;
+  transition: color 0.3s ease;
+}
+
+.book-form-link:hover {
+  color: #6C5441 !important;
+  /* Darker on hover */
+}
+
+
+/* Footer styling */
+.book-theme-footer {
+  background-color: #5A4434;
+  /* Dark brown footer */
+  color: #FDF8ED;
+  /* Creamy text */
+  text-align: center;
+  padding: 1.5rem 0;
+  /* More vertical padding */
+  margin-top: auto;
+  /* Push footer to the bottom */
+  border-top-left-radius: 20px;
+  /* More pronounced rounded corners */
+  border-top-right-radius: 20px;
+  box-shadow: 0 -8px 16px rgba(0, 0, 0, 0.3);
+  /* Deeper shadow */
+  font-size: 0.95rem;
+  /* Slightly larger text */
+  text-shadow: 0.5px 0.5px 1px rgba(0, 0, 0, 0.2);
+}
