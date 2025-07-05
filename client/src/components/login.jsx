@@ -3,7 +3,7 @@
 import axios from 'axios'; // Import axios for consistent API calls
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Container, Form, Modal, Spinner } from 'react-bootstrap'; // Added Modal
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom'; // ADDED Link import
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 
@@ -253,9 +253,9 @@ function Login() {
 
             <p className="text-center mt-3 book-form-text">
                 Don't have an account?
-                <a href="#" className="book-form-link" onClick={() => navigate('/register')}>
+                <Link to="/register" className="book-form-link"> {/* CHANGED from <a> to <Link> */}
                     Register
-                </a>
+                </Link>
             </p>
 
             {/* Forgot Password Modal */}

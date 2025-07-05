@@ -1,13 +1,13 @@
 // src/components/Dashboard.jsx
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Col, Container, Form, InputGroup, ListGroup, Modal, ProgressBar, Row, Spinner, Tab, Tabs } from 'react-bootstrap';
+import { Alert, Button, Card, Col, Container, Form, InputGroup, ListGroup, Modal, ProgressBar, Row, Spinner, Tab, Tabs } from 'react-bootstrap'; // Added Spinner
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../contexts/ToastContext'; // Corrected import statement
+import { useToast } from '../contexts/ToastContext';
 // import UsersPage from './UsersPage.jsx'; // Removed: Import the UsersPage component
 
 // Firebase imports for Firestore and Auth (using npm package imports)
-import { initializeApp } from 'firebase/app'; // Corrected import syntax: removed '='
+import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
 import { addDoc, collection, deleteDoc, doc, getFirestore, onSnapshot, query, updateDoc } from 'firebase/firestore';
 
@@ -231,30 +231,16 @@ const ReadingStatistics = ({ stats }) => {
 function Dashboard() {
     const { user, isAuthenticated, loading: authLoading, token } = useAuth();
     const { showToast } = useToast();
-    const navigate = useNavigate();
+    const navigate = useNavigate(); // 'navigate' is used
 
     // HARDCODED GLOBAL VARIABLES FOR CANVAS ENVIRONMENT
-    // These are typically provided by the Canvas platform's environment settings,
-    // but are hardcoded here as a workaround since the user cannot locate those settings.
-    // IMPORTANT: Ensure these values EXACTLY match your Firebase project's configuration
-    // and the 'appId' used in your Firestore Security Rules.
-    //
-    // TO VERIFY:
-    // 1. Go to your Firebase Console (console.firebase.google.com)
-    // 2. Select your project.
-    // 3. Go to Project settings (gear icon next to Project overview).
-    // 4. Under "Your apps", find the "Firebase SDK snippet" for your web app.
-    // 5. Copy the 'apiKey', 'authDomain', 'projectId', etc., and paste them into the JSON below.
-    // 6. Ensure the '__app_id' matches the 'appId' you intend to use in your Firestore rules.
-    const __app_id = 'bookends-app'; // A unique ID for your app within the Canvas
-    // CORRECTED JSON PARSE SYNTAX AND API KEY ENCAPSULATION
+    const __app_id = 'bookends-app';
     const __firebase_config = JSON.parse('{"apiKey":"AIzaSyCHsj6GgNIz123WiXdHoNZn57mqGbCrBCI","authDomain":"bookends-e027a.firebaseapp.com","projectId":"bookends-e027a","storageBucket":"bookends-e027a.appspot.com","messagingSenderId":"693810748587","appId":"1:693810748587:web:c1c6ac0602c9c7e74f2bee","measurementId":"G-EKPDKZZSJL"}');
-    const __initial_auth_token = null; // Set to null if Canvas does not provide a custom token, will default to anonymous sign-in
+    const __initial_auth_token = null;
 
     // Firebase state
     const [db, setDb] = useState(null);
     const [currentUserId, setCurrentUserId] = useState(null);
-    // Removed isFirebaseReady state
 
     const [activeTab, setActiveTab] = useState('readingList');
     const [myBooks, setMyBooks] = useState([]);
@@ -285,15 +271,15 @@ function Dashboard() {
     const [sortOrder, setSortOrder] = useState('desc');
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterGenre, setFilterGenre] = useState('All');
-    const [filterAuthor, setFilterAuthor] = useState('All');
+    const [filterAuthor, setFilterAuthor] = useState('All'); // 'filterAuthor' is used
     const [minRatingFilter, setMinRatingFilter] = useState('0');
     const [hasNotesFilter, setHasNotesFilter] = useState('All');
     const [filterPageCount, setFilterPageCount] = useState('All');
 
     const [showGoalModal, setShowGoalModal] = useState(false);
-    const [newGoalType, setNewGoalType] = useState('books'); // Corrected syntax here
-    const [newGoalTarget, setNewGoalTarget] = '';
-    const [newGoalPeriod, setNewGoalPeriod] = 'yearly';
+    const [newGoalType, setNewGoalType] = useState('books');
+    const [newGoalTarget, setNewGoalTarget] = useState(''); // 'newGoalTarget' is used
+    const [newGoalPeriod, setNewGoalPeriod] = useState('yearly');
     const [currentGoals, setCurrentGoals] = useState(() => {
         try {
             const storedGoals = localStorage.getItem('readingGoals');
@@ -306,12 +292,12 @@ function Dashboard() {
 
     const [recommendedBooks, setRecommendedBooks] = useState([]);
     const [loadingRecommendations, setLoadingRecommendations] = useState(false);
-    const [errorRecommendations, setErrorRecommendations] = '';
+    const [errorRecommendations, setErrorRecommendations] = useState('');
     const [selectedRecommendationSeedBook, setSelectedRecommendationSeedBook] = useState(null);
 
     const [categorizedRecommendations, setCategorizedRecommendations] = useState({});
     const [loadingCategorizedRecommendations, setLoadingCategorizedRecommendations] = useState(false);
-    const [errorCategorizedRecommendations, setErrorCategorizedRecommendations] = ''; // Corrected line: removed extra '='
+    const [errorCategorizedRecommendations, setErrorCategorizedRecommendations] = useState('');
 
     // New state to track books explicitly marked as "Not Interested" (in-memory for session)
     const [notInterestedBooks, setNotInterestedBooks] = useState(new Set());
@@ -322,7 +308,6 @@ function Dashboard() {
         const firebaseConfig = __firebase_config;
         const initialAuthToken = __initial_auth_token;
 
-        // Added console log for firebaseConfig
         console.log("Firebase Init: Using firebaseConfig:", firebaseConfig);
 
         if (Object.keys(firebaseConfig).length === 0) {
@@ -340,7 +325,7 @@ function Dashboard() {
             firestoreDbInstance = getFirestore(appInstance);
             authInstance = getAuth(appInstance);
 
-            setDb(firestoreDbInstance); // Set db state immediately after getting it
+            setDb(firestoreDbInstance);
 
             const unsubscribe = onAuthStateChanged(authInstance, async (firebaseUser) => {
                 let userIdToSet = null;
@@ -364,18 +349,18 @@ function Dashboard() {
                         userIdToSet = crypto.randomUUID(); // Fallback to random ID
                     }
                 }
-                setCurrentUserId(userIdToSet); // Set userId state here
+                setCurrentUserId(userIdToSet);
                 console.log("Firebase Init: db instance available:", !!firestoreDbInstance, "userId available:", !!userIdToSet);
             });
 
-            return () => unsubscribe(); // Cleanup auth listener
+            return () => unsubscribe();
         } catch (error) {
             console.error("Firebase initialization error:", error);
-            setDb(null); // Ensure db is null on error
-            setCurrentUserId(null); // Ensure userId is null on error
+            setDb(null);
+            setCurrentUserId(null);
             setErrorMyBooks('Failed to initialize Firebase. Please check console for details.');
         }
-    }, []); // Run once on component mount
+    }, [__app_id, __firebase_config, __initial_auth_token]); // Added dependencies to useEffect
 
     // Effect to save goals to local storage
     useEffect(() => {
@@ -402,8 +387,8 @@ function Dashboard() {
     useEffect(() => {
         if (!db || !currentUserId) {
             console.log("Firestore: Not ready to fetch books yet (db not set or userId missing).");
-            setLoadingMyBooks(false); // Ensure loading is false if not ready
-            setErrorMyBooks('Authentication required to load your reading list.'); // Set error if not ready
+            setLoadingMyBooks(false);
+            setErrorMyBooks('Authentication required to load your reading list.');
             return;
         }
 
@@ -414,16 +399,15 @@ function Dashboard() {
         setLoadingMyBooks(true);
         setErrorMyBooks('');
 
-        // Define the collection path for the current user's books
-        const appId = __app_id; // Use the hardcoded appId
+        const appId = __app_id;
         const booksCollectionPath = `artifacts/${appId}/users/${currentUserId}/books`;
-        console.log("Firestore: Attempting to fetch from path:", booksCollectionPath, "with userId:", currentUserId); // Added detailed log
+        console.log("Firestore: Attempting to fetch from path:", booksCollectionPath, "with userId:", currentUserId);
         const booksCollectionRef = collection(db, booksCollectionPath);
-        const q = query(booksCollectionRef); // No orderBy to avoid index issues, sort in memory
+        const q = query(booksCollectionRef);
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const booksData = snapshot.docs.map(doc => ({
-                _id: doc.id, // Use doc.id for the unique ID
+                _id: doc.id,
                 ...doc.data()
             }));
             setMyBooks(booksData);
@@ -435,12 +419,10 @@ function Dashboard() {
             setLoadingMyBooks(false);
         });
 
-        return () => unsubscribe(); // Cleanup listener on unmount or dependency change
-    }, [db, currentUserId, __app_id]); // Depend on db and currentUserId
+        return () => unsubscribe();
+    }, [db, currentUserId, __app_id]);
 
-
-    // Function to fetch books from Google Books API
-    const fetchBooksFromGoogleAPI = async (query, maxResults = 10, startIndex = 0) => {
+    const fetchBooksFromGoogleAPI = useCallback(async (query, maxResults = 10, startIndex = 0) => { // 'fetchBooksFromGoogleAPI' is used
         try {
             const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=${maxResults}&startIndex=${startIndex}`);
             if (!response.ok) {
@@ -449,7 +431,7 @@ function Dashboard() {
             const data = await response.json();
             if (data.items) {
                 return data.items.map(item => {
-                    const volumeInfo = item.volumeInfo; // Destructure volumeInfo here
+                    const volumeInfo = item.volumeInfo;
                     return {
                         id: item.id,
                         title: volumeInfo.title || 'N/A',
@@ -470,22 +452,21 @@ function Dashboard() {
             showToast("Failed to fetch books from Google Books. Please try again later.", 'danger', 'API Error');
             return [];
         }
-    };
+    }, [showToast]); // Added showToast to dependencies
 
     const searchExternalBooks = useCallback(async (query) => {
         setLoadingExternalBooks(true);
         setErrorExternalBooks('');
-        const books = await fetchBooksFromGoogleAPI(query, 20); // Fetch more results for search
+        const books = await fetchBooksFromGoogleAPI(query, 20);
         setExternalBooks(books);
         setLoadingExternalBooks(false);
-    }, []);
+    }, [fetchBooksFromGoogleAPI]);
 
     const fetchRecommendations = useCallback(async () => {
         setLoadingRecommendations(true);
         setErrorRecommendations('');
 
         let currentRecs = [];
-        // Helper to check if a book is already in my list or marked as not interested
         const isExcluded = (book) => {
             const inMyBooks = myBooks.some(b =>
                 b.title.toLowerCase() === book.title.toLowerCase() &&
@@ -502,23 +483,21 @@ function Dashboard() {
             let queryParts = [];
             if (seedGenres.length > 0) queryParts.push(`subject:${seedGenres[0]}`);
             if (seedAuthors.length > 0) queryParts.push(`inauthor:"${seedAuthors[0]}"`);
-            if (queryParts.length === 0) queryParts.push("fiction"); // Fallback if no specific info
+            if (queryParts.length === 0) queryParts.push("fiction");
 
             let startIndex = 0;
-            const maxAttempts = 3; // Number of times to try fetching more books
-            const booksPerFetch = 10; // Number of books to fetch per API call
-            const targetRecs = 10; // Desired number of recommendations
+            const maxAttempts = 3;
+            const booksPerFetch = 10;
+            const targetRecs = 10;
 
             for (let attempt = 0; attempt < maxAttempts && currentRecs.length < targetRecs; attempt++) {
                 const fetched = await fetchBooksFromGoogleAPI(queryParts.join(' '), booksPerFetch, startIndex);
                 const filteredFetched = fetched.filter(book => !isExcluded(book));
-                // Add unique new books to currentRecs
                 currentRecs = [...currentRecs, ...filteredFetched.filter(book => !currentRecs.some(r => r.id === book.id))];
                 startIndex += booksPerFetch;
             }
-            currentRecs = currentRecs.slice(0, targetRecs); // Ensure we don't exceed the target
+            currentRecs = currentRecs.slice(0, targetRecs);
 
-            // Simple similarity scoring for ordering
             currentRecs.forEach(recBook => {
                 let similarityScore = 0;
                 const recGenres = recBook.genre ? recBook.genre.split(',').map(g => g.trim()) : [];
@@ -534,7 +513,6 @@ function Dashboard() {
             currentRecs.sort((a, b) => (b.similarityScore || 0) - (a.similarityScore || 0));
 
         } else {
-            // General popular books if no seed selected
             let startIndex = 0;
             const maxAttempts = 3;
             const booksPerFetch = 10;
@@ -551,16 +529,15 @@ function Dashboard() {
 
         setRecommendedBooks(currentRecs);
         setLoadingRecommendations(false);
-    }, [myBooks, selectedRecommendationSeedBook, notInterestedBooks]); // Added notInterestedBooks to dependencies
+    }, [myBooks, selectedRecommendationSeedBook, notInterestedBooks, fetchBooksFromGoogleAPI]); // Added fetchBooksFromGoogleAPI to dependencies
 
     const fetchCategorizedRecommendations = useCallback(async () => {
         setLoadingCategorizedRecommendations(true);
         setErrorCategorizedRecommendations('');
 
         const categorizedData = {};
-        const genresToDisplay = ["Fantasy", "Science Fiction", "Mystery", "Thriller", "Horror", "Romance", "Historical Fiction", "Biography", "Young Adult", "Fiction", "Nonfiction", "Self-Help", "Business"]; // Expanded genres for more variety
+        const genresToDisplay = ["Fantasy", "Science Fiction", "Mystery", "Thriller", "Horror", "Romance", "Historical Fiction", "Biography", "Young Adult", "Fiction", "Nonfiction", "Self-Help", "Business"];
 
-        // Helper to check if a book is already in my list or marked as not interested
         const isExcluded = (book) => {
             const inMyBooks = myBooks.some(b =>
                 b.title.toLowerCase() === book.title.toLowerCase() &&
@@ -570,49 +547,42 @@ function Dashboard() {
             return inMyBooks || isNotInterested;
         };
 
-        for (const genre of genresToDisplay) {
+        // Use Promise.all to fetch categories concurrently
+        const fetchPromises = genresToDisplay.map(async (genre) => {
             let fetchedBooksForCategory = [];
             let startIndex = 0;
-            const maxAttempts = 3; // Try fetching more if initial results are all excluded
-            const booksPerFetch = 10; // Fetch more books at once to increase chances of finding new ones
-            const targetBooksPerCategory = 4; // How many books we want to display per category
+            const maxAttempts = 3;
+            const booksPerFetch = 10;
+            const targetBooksPerCategory = 4;
 
             for (let attempt = 0; attempt < maxAttempts; attempt++) {
                 const query = `subject:${genre}`;
                 const books = await fetchBooksFromGoogleAPI(query, booksPerFetch, startIndex);
 
                 const newUniqueBooks = books.filter(book => {
-                    // Filter out books already in my list or explicitly marked as not interested
                     return !isExcluded(book) &&
-                        !fetchedBooksForCategory.some(existingBook => existingBook.id === book.id); // Prevent duplicates within this category's fetches
+                        !fetchedBooksForCategory.some(existingBook => existingBook.id === book.id);
                 });
 
                 fetchedBooksForCategory = [...fetchedBooksForCategory, ...newUniqueBooks];
 
                 if (fetchedBooksForCategory.length >= targetBooksPerCategory) {
-                    break; // We have enough books for this category
+                    break;
                 }
 
-                startIndex += booksPerFetch; // Increment startIndex for the next attempt
+                startIndex += booksPerFetch;
             }
 
             if (fetchedBooksForCategory.length > 0) {
-                categorizedData[genre] = fetchedBooksForCategory.slice(0, targetBooksPerCategory); // Take only the target number
+                categorizedData[genre] = fetchedBooksForCategory.slice(0, targetBooksPerCategory);
             }
-        }
+        });
+
+        await Promise.all(fetchPromises);
 
         setCategorizedRecommendations(categorizedData);
         setLoadingCategorizedRecommendations(false);
-    }, [myBooks, notInterestedBooks]); // Added notInterestedBooks to dependencies
-
-
-    // This useEffect was for initial mock data, now replaced by Firestore fetchMyBooks
-    // useEffect(() => {
-    //     if (isAuthenticated && user?.id) {
-    //         setMyBooks(Array.from(myBooksDb.current.values()).filter(book => book.user === user.id));
-    //     }
-    //     setLoadingMyBooks(false);
-    // }, [user, isAuthenticated]);
+    }, [myBooks, notInterestedBooks, fetchBooksFromGoogleAPI]); // Added fetchBooksFromGoogleAPI to dependencies
 
 
     useEffect(() => {
@@ -683,7 +653,7 @@ function Dashboard() {
         const mostCommonGenre = Object.entries(genreCounts).sort(([, countA], [, countB]) => countB - countA)[0]?.[0] || 'N/A';
         const mostCommonAuthor = Object.entries(authorCounts).sort(([, countA], [, countB]) => countB - countA)[0]?.[0] || 'N/A';
         const averageRating = ratedBooksCount > 0 ? (totalRating / ratedBooksCount).toFixed(1) : 'N/A';
-        const averagePagesPerFinishedBook = totalBooksFinished > 0 ? (totalPagesReadAcrossAllBooks / totalBooksFinished).toFixed(0) : 'N/A';
+        const averagePagesPerFinishedBook = totalBooksFinished > 0 ? (totalPagesReadAcrossAllBooks / totalBooksFinished).toFixed(0) : 'N/A'; // 'averagePagesPerFinishedBook' is used
 
 
         return {
@@ -706,8 +676,8 @@ function Dashboard() {
 
     useEffect(() => {
         currentGoals.forEach(goal => {
-            let currentProgressValue = 0;
-            let targetValue = goal.target;
+            let currentProgressValue = 0; // 'currentProgressValue' is used
+            let targetValue = goal.target; // 'targetValue' is used
 
             if (goal.type === 'books') {
                 currentProgressValue = readingStatistics.totalBooksFinished;
@@ -719,7 +689,7 @@ function Dashboard() {
 
 
     const handleExternalSearch = useCallback((e) => {
-        if (e && typeof e.preventDefault === 'function') { // Check if 'e' is an event object
+        if (e && typeof e.preventDefault === 'function') {
             e.preventDefault();
         }
         const trimmedSearchTerm = searchTerm.trim();
@@ -742,11 +712,18 @@ function Dashboard() {
     const handleEditClick = (book) => {
         setBookToEdit(book);
         setEditFormData({
-            title: '', author: '', description: '', genre: '', coverImageUrl: '', status: '',
-            currentPage: '', totalPages: '',
-            notes: '', highlights: '',
-            rating: '',
-            reviewText: ''
+            title: book.title || '', // Initialize with existing book data
+            author: book.author || '',
+            description: book.description || '',
+            genre: book.genre || '',
+            coverImageUrl: book.coverImageUrl || '',
+            status: book.status || '',
+            currentPage: book.currentPage || '',
+            totalPages: book.totalPages || '',
+            notes: book.notes || '',
+            highlights: book.highlights || '',
+            rating: book.rating !== null && book.rating !== undefined ? book.rating : '', // Handle null rating
+            reviewText: book.reviewText || ''
         });
         setShowEditModal(true);
     };
@@ -789,14 +766,12 @@ function Dashboard() {
                 totalPages: totalPagesValue
             };
 
-            // Get the document reference for the book in Firestore
-            const appId = __app_id; // Use the hardcoded appId
+            const appId = __app_id;
             const bookDocRef = doc(db, `artifacts/${appId}/users/${currentUserId}/books`, bookToEdit._id);
             await updateDoc(bookDocRef, updatedBookData);
 
             showToast(`"${editFormData.title}" updated successfully!`, 'success', 'Success');
             setShowEditModal(false);
-            // The onSnapshot listener in fetchMyBooks will automatically update myBooks state.
         } catch (err) {
             console.error("Error updating book (Firestore):", err);
             showToast("Failed to update book.", 'danger', 'Error');
@@ -809,7 +784,6 @@ function Dashboard() {
             return;
         }
 
-        // Check if the book is already in 'myBooks' to prevent duplicates (client-side check)
         const isAlreadyInMyBooks = myBooks.some(book =>
             book.title.toLowerCase() === bookToAdd.title.toLowerCase() &&
             book.author.toLowerCase() === bookToAdd.author.toLowerCase()
@@ -829,27 +803,25 @@ function Dashboard() {
                 genre: bookToAdd.genre || 'General',
                 coverImageUrl: bookToAdd.coverImageUrl,
                 status: 'Planned',
-                user: currentUserId, // Associate the book with the current authenticated user ID
+                user: currentUserId,
                 currentPage: 0,
                 totalPages: bookToAdd.pageCount || 0,
                 notes: '',
                 highlights: '',
                 rating: null,
                 reviewText: '',
-                addedDate: new Date().toISOString() // Store date as ISO string
+                addedDate: new Date().toISOString()
             };
 
             console.log("DEBUG: handleAddToList - Value of 'db' before calling collection:", db);
             console.log("DEBUG: handleAddToList - Type of 'db' before calling collection:", typeof db);
             console.log("DEBUG: handleAddToList - Does 'db' have a 'collection' method?", typeof db.collection === 'function');
 
-            // Add the new book document to Firestore
-            const appId = __app_id; // Use the hardcoded appId
+            const appId = __app_id;
             await addDoc(collection(db, `artifacts/${appId}/users/${currentUserId}/books`), newBookData);
 
             showToast(`"${bookToAdd.title}" added to your reading list!`, 'success', 'Success');
             setShowDetailsModal(false);
-            // fetchMyBooks will automatically update due to onSnapshot listener
             fetchRecommendations();
             fetchCategorizedRecommendations();
         } catch (err) {
@@ -864,7 +836,6 @@ function Dashboard() {
             return;
         }
 
-        // Check if the book is already in 'myBooks' to prevent duplicates
         const isAlreadyInMyBooks = myBooks.some(b =>
             b.title.toLowerCase() === book.title.toLowerCase() &&
             b.author.toLowerCase() === book.author.toLowerCase()
@@ -897,10 +868,9 @@ function Dashboard() {
             console.log("DEBUG: handleWantToRead - Type of 'db' before calling collection:", typeof db);
             console.log("DEBUG: handleWantToRead - Does 'db' have a 'collection' method?", typeof db.collection === 'function');
 
-            const appId = __app_id; // Use the hardcoded appId
+            const appId = __app_id;
             await addDoc(collection(db, `artifacts/${appId}/users/${currentUserId}/books`), newBookData);
             showToast(`"${book.title}" added to your "Want to Read" list!`, 'success', 'Success');
-            // fetchMyBooks will automatically update due to onSnapshot listener
             fetchCategorizedRecommendations();
         } catch (err) {
             console.error("Error adding book to 'Want to Read' (Firestore):", err);
@@ -914,7 +884,7 @@ function Dashboard() {
             return;
         }
         showToast(`"${book.title}" marked as "Not Interested".`, 'info', 'Preference Saved');
-        setNotInterestedBooks(prev => new Set(prev).add(book.id)); // Add book ID to the not interested set
+        setNotInterestedBooks(prev => new Set(prev).add(book.id));
         setCategorizedRecommendations(prevRecs => {
             const newRecs = { ...prevRecs };
             for (const category in newRecs) {
@@ -939,11 +909,10 @@ function Dashboard() {
         }
 
         try {
-            const appId = __app_id; // Use the hardcoded appId
+            const appId = __app_id;
             const bookDocRef = doc(db, `artifacts/${appId}/users/${currentUserId}/books`, confirmRemoveBook._id);
             await deleteDoc(bookDocRef);
             showToast(`"${confirmRemoveBook.title}" removed from your reading list.`, 'success', 'Success');
-            // fetchMyBooks will automatically update due to onSnapshot listener
         } catch (err) {
             console.error("Error removing book (Firestore):", err);
             showToast("Failed to remove book.", 'danger', 'Error');
@@ -958,7 +927,7 @@ function Dashboard() {
             return;
         }
 
-        const bookToUpdate = myBooks.find(b => b._id === bookId); // Find from local state
+        const bookToUpdate = myBooks.find(b => b._id === bookId);
         if (!bookToUpdate) {
             showToast('Book not found for update.', 'danger', 'Error');
             return;
@@ -973,12 +942,10 @@ function Dashboard() {
         }
 
         try {
-            const appId = __app_id; // Use the hardcoded appId
+            const appId = __app_id;
             const bookDocRef = doc(db, `artifacts/${appId}/users/${currentUserId}/books`, bookId);
             await updateDoc(bookDocRef, { [fieldName]: updatedValue });
 
-            // The onSnapshot listener in fetchMyBooks will automatically update myBooks state.
-            // No need to manually update `myBooks` here.
             if (fieldName === 'currentPage') {
                 setCurrentPageInput(prevState => ({ ...prevState, [bookId]: updatedValue }));
             }
@@ -1045,7 +1012,6 @@ function Dashboard() {
             const authors = new Set();
             myBooks.forEach(book => {
                 if (book.author) {
-                    // FIX: Changed 'author' to 'book.author'
                     book.author.split(',').forEach(a => authors.add(a.trim()));
                 }
             });
@@ -1054,7 +1020,7 @@ function Dashboard() {
 
 
         let filteredBooks = (isAuthenticated && currentUserId)
-            ? myBooks.filter(book => book.user === currentUserId) // Filter by Firebase UID (currentUserId)
+            ? myBooks.filter(book => book.user === currentUserId)
             : [];
 
         if (filterStatus !== 'All') {
@@ -1296,7 +1262,7 @@ function Dashboard() {
             );
         }
 
-        console.log('DiscoverBooks: handleExternalSearch is defined:', typeof handleExternalSearch === 'function'); // Debugging log
+        console.log('DiscoverBooks: handleExternalSearch is defined:', typeof handleExternalSearch === 'function');
 
         return (
             <div className="mt-4 text-left">
@@ -1307,7 +1273,7 @@ function Dashboard() {
                         <SearchInput
                             searchTerm={searchTerm}
                             onSearchTermChange={setSearchTerm}
-                            onSearch={handleExternalSearch} // FIX: Changed from handleSearch to handleExternalSearch
+                            onSearch={handleExternalSearch}
                             placeholder="Search for books (e.g., author, title, genre)..."
                             className="form-control custom-input"
                         />
@@ -1403,8 +1369,8 @@ function Dashboard() {
                             </div>
                             <div className="text-right mt-3">
                                 <Button variant="link" className="text-brown-800 font-semibold text-sm" onClick={() => {
-                                    setSearchTerm(category); // Set the search term to the category
-                                    searchExternalBooks(category); // Trigger the search
+                                    setSearchTerm(category);
+                                    searchExternalBooks(category);
                                 }}>
                                     More {category} books »
                                 </Button>
@@ -1420,7 +1386,7 @@ function Dashboard() {
         const [recSortCriteria, setRecSortCriteria] = useState('similarityScore');
         const [recSortOrder, setRecSortOrder] = useState('desc');
         const [recFilterGenre, setRecFilterGenre] = useState('All');
-        const [minRatingFilter, setMinRatingFilter] = useState('0');
+        const [minRatingFilter, setMinRatingFilter] = useState('0'); // 'minRatingFilter' is used
 
         const uniqueRecGenres = useMemo(() => {
             const genres = new Set();
@@ -1672,7 +1638,7 @@ function Dashboard() {
     };
 
 
-    if (authLoading || !db || !currentUserId) { // Wait for AuthContext, db, and currentUserId
+    if (authLoading || !db || !currentUserId) {
         return (
             <Container className="d-flex justify-content-center align-items-center min-vh-100 bg-light-brown-100">
                 <Spinner animation="border" role="status" style={{ color: '#5a4434' }}>
