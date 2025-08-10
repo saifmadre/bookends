@@ -1,50 +1,59 @@
 // src/components/UsersPage.jsx
+import { arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, query, setDoc, updateDoc } from 'firebase/firestore'; // Import Firestore functions
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Button, Card, Container, Spinner, Tab, Tabs } from 'react-bootstrap';
-import { Link } from 'react-router-dom'; // Import Link for clickable user cards
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import SearchInput from './SearchInput.jsx'; // Reusing the SearchInput component
+import SearchInput from './SearchInput.jsx';
 
 // Helper component for displaying individual user cards
-const UserCard = ({ user, currentUser, relationships, onFollow, onUnfollow, onAccept, onReject, onRemoveFollower, onRespondToRequest }) => {
+const UserCard = ({ user, currentUser, relationships, onFollow, onUnfollow, onRespondToRequest }) => {
     // Safely destructure relationship arrays, providing default empty arrays if undefined
     const { following = [], pendingRequests = [], followers = [] } = relationships;
 
     // Determine the status of the relationship for the current user to the displayed 'user'
-    const isFollowing = following.some(f => f._id === user._id);
-    const hasSentRequest = following.some(f => f._id === user._id && f.status === 'pending');
-    const hasIncomingRequest = pendingRequests.some(r => r._id === user._id);
+    const isFollowing = following.some(f => f.userId === user.id && f.status === 'accepted');
+    const hasSentRequest = following.some(f => f.userId === user.id && f.status === 'pending');
+    const hasIncomingRequest = pendingRequests.some(r => r.userId === user.id && r.status === 'pending'); // Incoming request for *current user* from *this* user
 
     let buttonContent;
     let buttonVariant;
     let buttonDisabled = false;
     let buttonAction = null;
 
-    if (user._id === currentUser.id) {
+    if (!currentUser || !currentUser.id) { // If no current user, just show a disabled "Log in" button
+        buttonContent = 'Log in to Connect';
+        buttonVariant = 'outline-secondary';
+        buttonDisabled = true;
+    } else if (user.id === currentUser.id) {
         buttonContent = 'Your Profile';
         buttonVariant = 'outline-secondary';
         buttonDisabled = true;
     } else if (hasIncomingRequest) {
+        // This user has sent a request to the current user
         buttonContent = (
             <>
-                <Button variant="success" size="sm" className="me-2 custom-button-sm" onClick={() => onRespondToRequest(user._id, 'accept')}>Accept</Button>
-                <Button variant="danger" size="sm" className="custom-button-sm" onClick={() => onRespondToRequest(user._id, 'reject')}>Reject</Button>
+                <Button variant="success" size="sm" className="me-2 custom-button-sm" onClick={() => onRespondToRequest(user.id, 'accept')}>Accept</Button>
+                <Button variant="danger" size="sm" className="custom-button-sm" onClick={() => onRespondToRequest(user.id, 'reject')}>Reject</Button>
             </>
         );
         buttonVariant = null; // No single variant for a group of buttons
     } else if (hasSentRequest) {
+        // Current user has sent a request to this user
         buttonContent = 'Request Sent';
         buttonVariant = 'outline-info';
         buttonDisabled = true;
     } else if (isFollowing) {
+        // Current user is following this user
         buttonContent = 'Following';
         buttonVariant = 'outline-primary';
-        buttonAction = () => onUnfollow(user._id);
+        buttonAction = () => onUnfollow(user.id);
     } else {
+        // Current user can follow this user
         buttonContent = 'Follow';
         buttonVariant = 'primary';
-        buttonAction = () => onFollow(user._id);
+        buttonAction = () => onFollow(user.id);
     }
 
     // Placeholder for user avatar (e.g., first letter of username)
@@ -54,7 +63,7 @@ const UserCard = ({ user, currentUser, relationships, onFollow, onUnfollow, onAc
         <Card className="user-card p-4 shadow-sm rounded-lg h-100 d-flex flex-column justify-content-between hover:shadow-md transition-shadow duration-200 border-light-brown-100">
             <Card.Body className="d-flex flex-column align-items-center text-center">
                 {/* Make the user avatar and username clickable to view profile */}
-                <Link to={`/profile/${user._id}`} className="user-card-link">
+                <Link to={`/profile/${user.id}`} className="user-card-link">
                     <div className="user-avatar mb-3">
                         {userAvatar}
                     </div>
@@ -85,8 +94,9 @@ const UserCard = ({ user, currentUser, relationships, onFollow, onUnfollow, onAc
 
 
 const UsersPage = () => {
-    const { user, isAuthenticated, token, loading: authLoading } = useAuth();
+    const { user: currentUser, isAuthenticated, loading: authLoading, db } = useAuth(); // Renamed 'user' to 'currentUser'
     const { showToast } = useToast();
+    const currentAppId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
     const [allUsers, setAllUsers] = useState([]);
     const [loadingAllUsers, setLoadingAllUsers] = useState(true);
@@ -101,106 +111,105 @@ const UsersPage = () => {
     const [activeTab, setActiveTab] = useState('discover'); // 'discover', 'following', 'followers', 'requests'
 
     // Log authentication state when component renders or state changes
-    console.log('UsersPage: Rendered. isAuthenticated:', isAuthenticated, 'token:', token ? 'Exists' : 'Missing', 'authLoading:', authLoading);
-    console.log('UsersPage: Current User:', user);
+    useEffect(() => {
+        console.log('UsersPage: Rendered. isAuthenticated:', isAuthenticated, 'authLoading:', authLoading);
+        console.log('UsersPage: Current User:', currentUser);
+    }, [isAuthenticated, authLoading, currentUser]);
 
 
-    // Fetch all discoverable users
+    // Fetch all discoverable users from Firestore
     const fetchAllUsers = useCallback(async () => {
         setLoadingAllUsers(true);
         setErrorAllUsers('');
 
-        if (authLoading || !isAuthenticated || !token) {
-            console.log('UsersPage: fetchAllUsers skipped - Auth not ready or not authenticated.');
+        if (authLoading) {
+            console.log('UsersPage: fetchAllUsers skipped - Auth is still loading.');
+            return; // Wait for auth to complete
+        }
+
+        if (!isAuthenticated || !currentUser?.id || !db) {
+            console.log('UsersPage: fetchAllUsers skipped - Not authenticated or DB not ready.');
             setErrorAllUsers('You must be logged in to view other users.');
             setLoadingAllUsers(false);
+            setAllUsers([]);
+            setFilteredUsers([]);
             return;
         }
 
         try {
-            const url = `http://localhost:5000/api/social/users`;
-            console.log('UsersPage: Fetching all discoverable users from:', url);
-            console.log('UsersPage: Sending x-auth-token:', token.substring(0, 10) + '...');
+            console.log('UsersPage: Fetching all discoverable users from Firestore.');
+            const usersCollectionRef = collection(db, `artifacts/${currentAppId}/users`);
+            const q = query(usersCollectionRef);
+            const querySnapshot = await getDocs(q);
 
-            const response = await fetch(url, {
-                headers: {
-                    'x-auth-token': token,
-                },
+            const fetchedUsers = [];
+            querySnapshot.forEach((doc) => {
+                const userData = doc.data();
+                // Exclude current user from the discover list
+                if (doc.id !== currentUser.id) {
+                    fetchedUsers.push({ id: doc.id, ...userData });
+                }
             });
-            const data = await response.json();
-
-            if (response.ok) {
-                const usersWithoutCurrentUser = data.filter(u => u._id !== user.id);
-                setAllUsers(usersWithoutCurrentUser);
-                setFilteredUsers(usersWithoutCurrentUser);
-                console.log('UsersPage: Successfully fetched all users. Count:', usersWithoutCurrentUser.length);
-            } else {
-                console.error('UsersPage: Error fetching all users:', data.msg || response.statusText);
-                setErrorAllUsers(data.msg || 'Failed to fetch users for discovery.');
-                showToast(data.msg || 'Failed to fetch users for discovery.', 'danger', 'Error');
-            }
+            setAllUsers(fetchedUsers);
+            setFilteredUsers(fetchedUsers); // Initially, filtered users are all users
+            console.log('UsersPage: Successfully fetched all users from Firestore. Count:', fetchedUsers.length);
         } catch (err) {
-            console.error('UsersPage: Network/Fetch error for all users:', err);
-            setErrorAllUsers('Network error: Could not connect to the server.');
-            showToast('Network error: Could not connect to the server.', 'danger', 'Network Error');
+            console.error('UsersPage: Error fetching all users from Firestore:', err);
+            setErrorAllUsers('Failed to fetch users for discovery. Please check network or Firestore rules.');
+            showToast('Failed to fetch users for discovery.', 'danger', 'Error');
         } finally {
             setLoadingAllUsers(false);
         }
-    }, [isAuthenticated, user, token, authLoading, showToast]);
+    }, [isAuthenticated, currentUser, authLoading, db, showToast, currentAppId]);
 
 
-    // Fetch current user's relationships (following, followers, pending requests)
+    // Fetch current user's relationships (following, followers, pending requests) from Firestore
     const fetchRelationships = useCallback(async () => {
-        if (authLoading || !isAuthenticated || !token || !user?.id) {
+        if (authLoading || !isAuthenticated || !currentUser?.id || !db) {
             console.log('UsersPage: fetchRelationships skipped - Auth not ready or not authenticated.');
             return;
         }
 
         try {
-            const endpoints = {
-                following: `http://localhost:5000/api/social/following`,
-                followers: `http://localhost:5000/api/social/followers`,
-                pendingRequests: `http://localhost:5000/api/social/pending-requests`
-            };
+            console.log('UsersPage: Fetching relationships from Firestore for user:', currentUser.id);
+            const userSocialDocRef = doc(db, `artifacts/${currentAppId}/users/${currentUser.id}/social`, 'relationships');
+            const docSnap = await getDoc(userSocialDocRef);
 
-            const [followingRes, followersRes, pendingReqRes] = await Promise.all([
-                fetch(endpoints.following, { headers: { 'x-auth-token': token } }),
-                fetch(endpoints.followers, { headers: { 'x-auth-token': token } }),
-                fetch(endpoints.pendingRequests, { headers: { 'x-auth-token': token } })
-            ]);
-
-            const followingData = followingRes.ok ? await followingRes.json() : [];
-            const followersData = followersRes.ok ? await followersRes.json() : [];
-            const pendingReqData = pendingReqRes.ok ? await pendingReqRes.json() : [];
-
-            setRelationships({
-                following: followingData,
-                followers: followersData,
-                pendingRequests: pendingReqData
-            });
-            console.log('UsersPage: Relationships fetched successfully.');
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                setRelationships({
+                    following: data.following || [],
+                    followers: data.followers || [],
+                    pendingRequests: data.pendingRequests || []
+                });
+                console.log('UsersPage: Relationships fetched successfully from Firestore:', data);
+            } else {
+                // If the document doesn't exist, initialize it with empty arrays
+                await setDoc(userSocialDocRef, { following: [], followers: [], pendingRequests: [] });
+                console.log('UsersPage: Social relationships document created for user:', currentUser.id);
+                setRelationships({ following: [], followers: [], pendingRequests: [] });
+            }
         } catch (err) {
-            console.error('UsersPage: Error fetching relationships:', err);
-            showToast('Failed to load social relationships.', 'danger', 'Error');
+            console.error('UsersPage: Error fetching relationships from Firestore:', err);
+            showToast('Failed to load social relationships from Firestore.', 'danger', 'Error');
         }
-    }, [isAuthenticated, user, token, authLoading, showToast]);
+    }, [isAuthenticated, currentUser, authLoading, db, showToast, currentAppId]);
 
 
-    // Effect to fetch initial data
+    // Effect to fetch initial data (all users and relationships)
     useEffect(() => {
-        console.log('UsersPage: Primary useEffect triggered. Auth status:', isAuthenticated, 'Loading:', authLoading);
-        if (!authLoading && isAuthenticated && user?.id && token) {
+        if (!authLoading && isAuthenticated && currentUser?.id && db) {
             fetchAllUsers();
             fetchRelationships();
-        } else if (!authLoading && (!isAuthenticated || !user?.id || !token)) {
+        } else if (!authLoading && (!isAuthenticated || !currentUser?.id || !db)) {
             setErrorAllUsers('You must be logged in to view other users.');
             setLoadingAllUsers(false);
             setAllUsers([]);
             setFilteredUsers([]);
             setRelationships({ following: [], pendingRequests: [], followers: [] });
-            console.log('UsersPage: Not authenticated, clearing user data and setting error.');
+            console.log('UsersPage: Not authenticated or DB not ready, clearing user data and setting error.');
         }
-    }, [isAuthenticated, user, token, authLoading, fetchAllUsers, fetchRelationships]);
+    }, [isAuthenticated, currentUser, authLoading, db, fetchAllUsers, fetchRelationships]); // Added db to dependencies
 
 
     // Handle search input changes
@@ -219,112 +228,154 @@ const UsersPage = () => {
     }, [allUsers]);
 
 
-    // Social actions
+    // Social actions (Follow, Unfollow, Accept/Reject Request, Remove Follower)
     const handleFollow = async (targetUserId) => {
-        if (!isAuthenticated || !token) {
+        if (!isAuthenticated || !currentUser?.id || !db) {
             showToast('Please log in to follow users.', 'danger', 'Authentication Required');
             return;
         }
+
         try {
-            const response = await fetch(`http://localhost:5000/api/social/follow/${targetUserId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-auth-token': token,
-                },
+            // 1. Update current user's 'following' list (add a pending request)
+            const currentUserSocialDocRef = doc(db, `artifacts/${currentAppId}/users/${currentUser.id}/social`, 'relationships');
+            await updateDoc(currentUserSocialDocRef, {
+                following: arrayUnion({ userId: targetUserId, status: 'pending', date: new Date().toISOString() })
             });
-            const data = await response.json();
-            if (response.ok) {
-                showToast(data.msg, 'success', 'Success');
-                fetchRelationships();
-            } else {
-                showToast(data.msg || 'Failed to send follow request.', 'danger', 'Error');
-            }
+
+            // 2. Update target user's 'pendingRequests' list
+            const targetUserSocialDocRef = doc(db, `artifacts/${currentAppId}/users/${targetUserId}/social`, 'relationships');
+            await updateDoc(targetUserSocialDocRef, {
+                pendingRequests: arrayUnion({ userId: currentUser.id, status: 'pending', date: new Date().toISOString() })
+            });
+
+            showToast('Follow request sent!', 'success', 'Request Sent');
+            fetchRelationships(); // Re-fetch relationships to update UI
         } catch (err) {
-            console.error('Error following user:', err);
-            showToast('Network error while sending follow request.', 'danger', 'Network Error');
+            console.error('Error sending follow request (Firestore):', err);
+            showToast('Failed to send follow request.', 'danger', 'Error');
         }
     };
 
     const handleUnfollow = async (targetUserId) => {
-        if (!isAuthenticated || !token) {
+        if (!isAuthenticated || !currentUser?.id || !db) {
             showToast('Please log in to unfollow users.', 'danger', 'Authentication Required');
             return;
         }
+
         try {
-            const response = await fetch(`http://localhost:5000/api/social/unfollow/${targetUserId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-auth-token': token,
-                },
+            // 1. Remove from current user's 'following' list
+            const currentUserSocialDocRef = doc(db, `artifacts/${currentAppId}/users/${currentUser.id}/social`, 'relationships');
+            await updateDoc(currentUserSocialDocRef, {
+                following: arrayRemove({ userId: targetUserId, status: 'accepted', date: relationships.following.find(f => f.userId === targetUserId && f.status === 'accepted')?.date })
             });
-            const data = await response.json();
-            if (response.ok) {
-                showToast(data.msg, 'success', 'Success');
-                fetchRelationships();
-            } else {
-                showToast(data.msg || 'Failed to unfollow user.', 'danger', 'Error');
-            }
+
+            // 2. Remove from target user's 'followers' list
+            const targetUserSocialDocRef = doc(db, `artifacts/${currentAppId}/users/${targetUserId}/social`, 'relationships');
+            await updateDoc(targetUserSocialDocRef, {
+                followers: arrayRemove({ userId: currentUser.id, status: 'accepted', date: relationships.followers.find(f => f.userId === currentUser.id && f.status === 'accepted')?.date })
+            });
+
+            showToast('Unfollowed successfully!', 'success', 'Unfollowed');
+            fetchRelationships(); // Re-fetch relationships to update UI
         } catch (err) {
-            console.error('Error unfollowing user:', err);
-            showToast('Network error while unfollowing user.', 'danger', 'Network Error');
+            console.error('Error unfollowing user (Firestore):', err);
+            showToast('Failed to unfollow user.', 'danger', 'Error');
         }
     };
 
     const handleRespondToRequest = async (requesterId, action) => {
-        if (!isAuthenticated || !token) {
+        if (!isAuthenticated || !currentUser?.id || !db) {
             showToast('Please log in to respond to requests.', 'danger', 'Authentication Required');
             return;
         }
-        try {
-            const endpoint = action === 'accept'
-                ? `http://localhost:5000/api/social/accept-follow/${requesterId}`
-                : `http://localhost:5000/api/social/reject-follow/${requesterId}`;
 
-            const response = await fetch(endpoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-auth-token': token,
-                },
+        const requesterRelationship = relationships.pendingRequests.find(req => req.userId === requesterId);
+        if (!requesterRelationship) {
+            showToast('No pending request found from this user.', 'danger', 'Error');
+            return;
+        }
+
+        try {
+            // 1. Remove request from current user's 'pendingRequests' list
+            const currentUserSocialDocRef = doc(db, `artifacts/${currentAppId}/users/${currentUser.id}/social`, 'relationships');
+            await updateDoc(currentUserSocialDocRef, {
+                pendingRequests: arrayRemove(requesterRelationship)
             });
-            const data = await response.json();
-            if (response.ok) {
-                showToast(data.msg, 'success', 'Success');
-                fetchRelationships();
-            } else {
-                showToast(data.msg || `Failed to ${action} request.`, 'danger', 'Error');
+
+            if (action === 'accept') {
+                // 2a. If accepted, add to current user's 'followers' list
+                await updateDoc(currentUserSocialDocRef, {
+                    followers: arrayUnion({ userId: requesterId, status: 'accepted', date: new Date().toISOString() })
+                });
+
+                // 2b. If accepted, update requester's 'following' list status from pending to accepted
+                const requesterSocialDocRef = doc(db, `artifacts/${currentAppId}/users/${requesterId}/social`, 'relationships');
+                const requesterFollowing = relationships.following.find(f => f.userId === currentUser.id && f.status === 'pending'); // This might be tricky, it's *their* following list, not current user's
+
+                // Fetch the current state of requester's following array to modify it correctly
+                const requesterSnap = await getDoc(requesterSocialDocRef);
+                if (requesterSnap.exists()) {
+                    const requesterData = requesterSnap.data();
+                    const newFollowing = (requesterData.following || []).map(f => {
+                        if (f.userId === currentUser.id && f.status === 'pending') {
+                            return { ...f, status: 'accepted' };
+                        }
+                        return f;
+                    });
+                    await updateDoc(requesterSocialDocRef, { following: newFollowing });
+                }
+
+
+                showToast(`Accepted ${allUsers.find(u => u.id === requesterId)?.username || 'user'}'s request!`, 'success', 'Request Accepted');
+            } else { // action === 'reject'
+                // 2. If rejected, also remove from requester's 'following' list (the pending entry)
+                const requesterSocialDocRef = doc(db, `artifacts/${currentAppId}/users/${requesterId}/social`, 'relationships');
+                const requesterFollowing = relationships.following.find(f => f.userId === currentUser.id && f.status === 'pending'); // Again, this is *their* list.
+
+                // Fetch the current state of requester's following array to remove it correctly
+                const requesterSnap = await getDoc(requesterSocialDocRef);
+                if (requesterSnap.exists()) {
+                    const requesterData = requesterSnap.data();
+                    const newFollowing = (requesterData.following || []).filter(f =>
+                        !(f.userId === currentUser.id && f.status === 'pending')
+                    );
+                    await updateDoc(requesterSocialDocRef, { following: newFollowing });
+                }
+
+
+                showToast(`Rejected ${allUsers.find(u => u.id === requesterId)?.username || 'user'}'s request.`, 'info', 'Request Rejected');
             }
+            fetchRelationships(); // Re-fetch relationships to update UI
         } catch (err) {
-            console.error(`Error ${action}ing request:`, err);
-            showToast(`Network error while ${action}ing request.`, 'danger', 'Network Error');
+            console.error(`Error ${action}ing request (Firestore):`, err);
+            showToast(`Failed to ${action} request.`, 'danger', 'Error');
         }
     };
 
     const handleRemoveFollower = async (followerId) => {
-        if (!isAuthenticated || !token) {
+        if (!isAuthenticated || !currentUser?.id || !db) {
             showToast('Please log in to remove followers.', 'danger', 'Authentication Required');
             return;
         }
+
         try {
-            const response = await fetch(`http://localhost:5000/api/social/remove-follower/${followerId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-auth-token': token,
-                },
+            // 1. Remove from current user's 'followers' list
+            const currentUserSocialDocRef = doc(db, `artifacts/${currentAppId}/users/${currentUser.id}/social`, 'relationships');
+            await updateDoc(currentUserSocialDocRef, {
+                followers: arrayRemove({ userId: followerId, status: 'accepted', date: relationships.followers.find(f => f.userId === followerId && f.status === 'accepted')?.date })
             });
-            const data = await response.json();
-            if (response.ok) {
-                showToast(data.msg, 'success', 'Success');
-                fetchRelationships();
-            } else {
-                showToast(data.msg || 'Failed to remove follower.', 'danger', 'Error');
-            }
+
+            // 2. Remove current user from follower's 'following' list
+            const followerSocialDocRef = doc(db, `artifacts/${currentAppId}/users/${followerId}/social`, 'relationships');
+            await updateDoc(followerSocialDocRef, {
+                following: arrayRemove({ userId: currentUser.id, status: 'accepted', date: relationships.following.find(f => f.userId === currentUser.id && f.status === 'accepted')?.date })
+            });
+
+            showToast(`Removed follower.`, 'success', 'Success');
+            fetchRelationships(); // Re-fetch relationships to update UI
         } catch (err) {
-            console.error('Error removing follower:', err);
-            showToast('Network error while removing follower.', 'danger', 'Network Error');
+            console.error('Error removing follower (Firestore):', err);
+            showToast('Failed to remove follower.', 'danger', 'Error');
         }
     };
 
@@ -371,16 +422,13 @@ const UsersPage = () => {
             <div className="user-list-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-4">
                 {usersToRender.map(u => (
                     <UserCard
-                        key={u._id}
+                        key={u.id} // Use u.id instead of u._id for Firestore documents
                         user={u}
-                        currentUser={user}
+                        currentUser={currentUser}
                         relationships={relationships}
                         onFollow={handleFollow}
                         onUnfollow={handleUnfollow}
-                        onAccept={handleRespondToRequest}
-                        onReject={handleRespondToRequest}
-                        onRemoveFollower={handleRemoveFollower}
-                        onRespondToRequest={handleRespondToRequest}
+                        onRespondToRequest={handleRespondToRequest} // Combined accept/reject
                     />
                 ))}
             </div>

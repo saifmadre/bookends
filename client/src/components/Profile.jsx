@@ -1,102 +1,98 @@
 // src/components/Profile.jsx
+import { doc, getDoc } from 'firebase/firestore'; // Import Firestore functions
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Button, Card, Container, Spinner } from 'react-bootstrap';
-import { useNavigate, useParams } from 'react-router-dom'; // Import useParams
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import EditProfile from './EditProfile'; // Ensure this import is present and correct
 
 function Profile() {
-    const { user: currentUser, isAuthenticated, token, loading: authLoading } = useAuth(); // Renamed 'user' to 'currentUser'
+    // Destructure db from useAuth as well, it's needed for Firestore calls
+    const { user: currentUser, isAuthenticated, loading: authLoading, db } = useAuth();
     const { showToast } = useToast();
     const navigate = useNavigate();
-    const { userId } = useParams(); // Get userId from URL parameters
+    const { userId: routeUserId } = useParams(); // Get userId from URL parameters
 
     const [profileData, setProfileData] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [loadingProfile, setLoadingProfile] = useState(true); // Renamed to differentiate from authLoading
     const [error, setError] = useState('');
     const [showEditProfileModal, setShowEditProfileModal] = useState(false);
 
     // Determine the ID of the profile to fetch: from URL param or current user
-    const profileToFetchId = userId || currentUser?.id;
-    const isCurrentUserProfile = !userId || (currentUser && userId === currentUser.id);
+    // Prioritize routeUserId if present, otherwise use currentUser's ID
+    const profileToFetchId = routeUserId || currentUser?.id;
+    const isCurrentUserProfile = !routeUserId || (currentUser && routeUserId === currentUser.id);
+
+    // This useEffect handles logging for debugging purposes
+    useEffect(() => {
+        console.log("Profile.jsx: Component Render Cycle. Auth states - authLoading:", authLoading, "isAuthenticated:", isAuthenticated, "currentUser (from AuthContext):", currentUser);
+        console.log("Profile.jsx: Determined profileToFetchId:", profileToFetchId, "isCurrentUserProfile:", isCurrentUserProfile);
+    }, [isAuthenticated, authLoading, currentUser, profileToFetchId, isCurrentUserProfile]);
+
 
     const fetchProfile = useCallback(async () => {
-        console.log("Profile.jsx: fetchProfile called. Auth states - authLoading:", authLoading, "isAuthenticated:", isAuthenticated, "token:", token ? "Present" : "Absent", "currentUser (from AuthContext):", currentUser);
-        console.log("Profile.jsx: profileToFetchId:", profileToFetchId, "isCurrentUserProfile:", isCurrentUserProfile);
+        setLoadingProfile(true); // Start loading for profile data
+        setError(''); // Clear previous errors
+        setProfileData(null); // Clear previous profile data
 
+        // If auth is still loading, wait for it to complete.
         if (authLoading) {
-            setLoading(true);
-            setError('');
-            setProfileData(null);
+            console.log("Profile.jsx: Waiting for AuthContext to finish loading before fetching profile.");
             return;
         }
 
         // If no ID is determined (e.g., not logged in and no userId in URL)
-        if (!profileToFetchId) {
-            setLoading(false);
-            setError('No user ID specified and not logged in.');
-            setProfileData(null);
+        // Or if it's the current user's profile and they are not authenticated.
+        if (!profileToFetchId || (isCurrentUserProfile && !isAuthenticated)) {
+            console.log("Profile.jsx: Not authenticated or no target user ID. Showing error.");
+            setError('You must be logged in to view your profile or a specific user profile.');
+            setLoadingProfile(false);
             return;
         }
 
-        setLoading(true);
-        setError('');
+        // Check if Firestore DB instance is available
+        if (!db) {
+            console.warn("Profile.jsx: Firestore DB instance is not available. Cannot fetch profile.");
+            setError('Database not initialized. Please ensure Firebase is configured and authenticated.');
+            setLoadingProfile(false);
+            return;
+        }
+
         try {
-            let apiUrl = '';
-            let headers = { 'Content-Type': 'application/json' };
+            console.log(`Profile.jsx: Attempting to fetch profile from Firestore for UID: ${profileToFetchId}`);
+            // Firestore path for user profiles: artifacts/{appId}/users/{userId}
+            // Use the global __app_id variable
+            const currentAppId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+            const userProfileDocRef = doc(db, `artifacts/${currentAppId}/users`, profileToFetchId);
+            const userProfileDocSnap = await getDoc(userProfileDocRef);
 
-            if (isCurrentUserProfile) {
-                // Fetch current user's full profile (requires authentication)
-                if (!isAuthenticated || !token) {
-                    throw new Error('You are not authenticated to view your profile. Please log in.');
-                }
-                apiUrl = 'http://localhost:5000/api/profile';
-                headers['x-auth-token'] = token;
-                console.log("Profile.jsx: Attempting to fetch CURRENT user's profile from:", apiUrl);
+            if (userProfileDocSnap.exists()) {
+                const fetchedProfileData = { id: userProfileDocSnap.id, ...userProfileDocSnap.data() };
+                setProfileData(fetchedProfileData);
+                console.log("Profile.jsx: Successfully fetched profile from Firestore:", fetchedProfileData);
             } else {
-                // Fetch another user's public profile (may or may not require authentication, depending on backend rules)
-                // For now, assume it requires authentication to view any profile via this route.
-                // If you want public profiles, the backend route '/api/profile/:id' should NOT use authenticateToken.
-                if (!isAuthenticated || !token) {
-                    throw new Error('You must be logged in to view other user profiles.');
-                }
-                apiUrl = `http://localhost:5000/api/profile/${profileToFetchId}`;
-                headers['x-auth-token'] = token; // Still send token for now, adjust if backend allows public view
-                console.log(`Profile.jsx: Attempting to fetch profile for ID ${profileToFetchId} from:`, apiUrl);
-            }
-
-            const response = await fetch(apiUrl, {
-                method: 'GET',
-                headers: headers,
-            });
-
-            const data = await response.json();
-            console.log("Profile.jsx: Raw data received from profile API:", data);
-
-            if (response.ok) {
-                setProfileData(data);
-                console.log("Profile.jsx: Profile data fetched successfully and set to state:", data);
-            } else {
-                console.error("Profile.jsx: Failed to fetch profile data from API.", data);
-                setError(data.msg || 'Failed to fetch profile data. Please ensure you are logged in.');
+                setError(`Profile not found for user ID: ${profileToFetchId}.`);
+                console.log("Profile.jsx: Profile document does not exist in Firestore for ID:", profileToFetchId);
             }
         } catch (err) {
-            console.error("Profile.jsx: Network error or server error fetching profile:", err);
-            setError(err.message || 'Network error or server unavailable. Please check your connection and try again.');
+            console.error("Profile.jsx: Error fetching user profile from Firestore:", err);
+            setError(err.message || 'Failed to load profile. Please try again. Ensure Firestore rules allow access.');
         } finally {
-            setLoading(false);
+            setLoadingProfile(false);
         }
-    }, [profileToFetchId, isCurrentUserProfile, isAuthenticated, token, authLoading, currentUser]);
+    }, [profileToFetchId, isCurrentUserProfile, isAuthenticated, authLoading, db, currentUser?.id]); // Added db to dependencies
 
+    // This effect triggers the fetchProfile whenever authLoading or profileToFetchId changes.
     useEffect(() => {
-        fetchProfile();
-    }, [fetchProfile]);
-
-    // Log profileData state after render to see its value
-    useEffect(() => {
-        console.log("Profile.jsx: Component re-rendered. Current profileData state:", profileData);
-    }, [profileData]);
+        // Fetch only when auth loading is complete AND we have a target ID OR it's a current user's profile and they're authenticated.
+        if (!authLoading) {
+            console.log("Profile.jsx: Auth loading complete. Initiating profile fetch via useEffect.");
+            fetchProfile();
+        } else {
+            console.log("Profile.jsx: Auth is still loading, deferring profile fetch.");
+        }
+    }, [authLoading, fetchProfile]);
 
 
     const handleEditProfileClick = () => {
@@ -108,16 +104,22 @@ function Profile() {
         fetchProfile(); // Re-fetch profile data after modal closes to ensure latest data is shown
     };
 
+    // Derived state for avatar initial (ensures it's reactive to profileData)
     const userAvatarInitial = profileData?.username ? profileData.username.charAt(0).toUpperCase() : '?';
     const defaultProfileImage = `https://placehold.co/100x100/d4c7b8/5a4434?text=${userAvatarInitial}`;
 
-    // Function to add a cache-busting timestamp to the image URL
+    // Function to add a cache-busting timestamp to the image URL (for locally served images or if caching is aggressive)
     const getCacheBustedImageUrl = (url) => {
         if (!url) return defaultProfileImage;
-        const baseUrl = 'http://localhost:5000';
-        const absoluteUrl = url.startsWith('/') ? `${baseUrl}${url}` : url;
-        const separator = absoluteUrl.includes('?') ? '&' : '?';
-        return `${absoluteUrl}${separator}_t=${new Date().getTime()}`;
+        // Check if the URL is an absolute URL pointing to your backend
+        // If your backend serves images, they might be at /uploads/images/xyz.jpg
+        // Change '/api/' prefix to match your backend's image serving path if different.
+        if (url.startsWith('/uploads/') || url.startsWith('/images/')) {
+            const baseUrl = ''; // Use relative path for Vercel, or your deployed backend URL if separate
+            const separator = url.includes('?') ? '&' : '?';
+            return `${baseUrl}${url}${separator}_t=${new Date().getTime()}`;
+        }
+        return url; // For external URLs (like social media profile pics), no cache busting needed
     };
 
     // New function to copy text to clipboard
@@ -145,17 +147,17 @@ function Profile() {
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
         if (diffDays < 30) {
-            return `${diffDays} days ago`;
+            return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
         } else if (diffDays < 365) {
             const months = Math.floor(diffDays / 30);
-            return `${months} month${months > 1 ? 's' : ''} ago`;
+            return `${months} month${months !== 1 ? 's' : ''} ago`;
         } else {
             const years = Math.floor(diffDays / 365);
             const remainingDays = diffDays % 365;
             const months = Math.floor(remainingDays / 30);
-            let result = `${years} year${years > 1 ? 's' : ''}`;
+            let result = `${years} year${years !== 1 ? 's' : ''}`;
             if (months > 0) {
-                result += ` and ${months} month${months > 1 ? 's' : ''}`;
+                result += ` and ${months} month${months !== 1 ? 's' : ''}`;
             }
             return result;
         }
@@ -173,6 +175,48 @@ function Profile() {
         (profileData?.averageRating && profileData.averageRating !== 'N/A' && profileData.averageRating !== 0) ||
         (profileData?.favoriteGenre && profileData.favoriteGenre !== 'N/A');
 
+    // Conditional rendering based on loading and error states
+    if (authLoading || loadingProfile) {
+        return (
+            <Container className="profile-container my-5 p-4 rounded-xl shadow-lg text-center bg-light-brown-100">
+                <Spinner animation="border" role="status" className="spinner-minimal">
+                    <span className="visually-hidden">Loading profile...</span>
+                </Spinner>
+                <p className="loading-text mt-3">Verifying authentication status and loading profile data...</p>
+            </Container>
+        );
+    }
+
+    if (error) {
+        return (
+            <Container className="profile-container my-5 p-4 rounded-xl shadow-lg text-center bg-light-brown-100">
+                <Alert variant="danger" className="alert-minimal alert-danger mb-0">{error}</Alert>
+            </Container>
+        );
+    }
+
+    // If no profileData despite no errors, and not authenticated, show specific message.
+    if (!profileData && !isAuthenticated) {
+        return (
+            <Container className="profile-container my-5 p-4 rounded-xl shadow-lg text-center bg-light-brown-100">
+                <Alert variant="info" className="alert-minimal mb-0 text-center">
+                    Please log in to view your profile or a specific user's profile.
+                </Alert>
+            </Container>
+        );
+    }
+
+    // If no profileData despite no errors and being authenticated (meaning profile doesn't exist in Firestore)
+    if (!profileData) {
+        return (
+            <Container className="profile-container my-5 p-4 rounded-xl shadow-lg text-center bg-light-brown-100">
+                <Alert variant="info" className="alert-minimal mb-0 text-center">
+                    No profile data found for this user.
+                </Alert>
+            </Container>
+        );
+    }
+
 
     return (
         <Container className="profile-container my-5 p-4 rounded-xl shadow-lg bg-light-brown-100 text-center">
@@ -180,148 +224,137 @@ function Profile() {
                 {isCurrentUserProfile ? 'Your Profile' : `${profileData?.username || 'User'}'s Profile`}
             </h2>
 
-            {authLoading || loading ? (
-                <Container className="profile-container my-5 p-4 rounded-xl shadow-lg text-center bg-light-brown-100">
-                    <Spinner animation="border" role="status" className="spinner-minimal">
-                        <span className="visually-hidden">Loading profile...</span>
-                    </Spinner>
-                    <p className="loading-text mt-3">Verifying authentication status and loading profile data...</p>
-                </Container>
-            ) : error ? (
-                <Container className="profile-container my-5 p-4 rounded-xl shadow-lg text-center bg-light-brown-100">
-                    <Alert variant="danger" className="alert-minimal alert-danger mb-0">{error}</Alert>
-                </Container>
-            ) : profileData ? (
-                <Card className="profile-card p-0 shadow-sm rounded-lg border-light-brown-100">
-                    {/* Profile Header Section */}
-                    <div className="profile-header-section p-4 bg-light-brown-50 rounded-top-lg">
-                        <div className="profile-avatar mb-3">
-                            {console.log("Profile.jsx: Image src being rendered:", getCacheBustedImageUrl(profileData.profileImage))}
-                            <img
-                                src={getCacheBustedImageUrl(profileData.profileImage)}
-                                alt="User Avatar"
-                                className="img-fluid rounded-circle profile-img"
-                                onError={(e) => { e.target.onerror = null; e.target.src = defaultProfileImage; }}
-                            />
-                        </div>
-                        <h3 className="profile-username-display text-3xl font-bold text-brown-800 mb-2">
-                            {profileData.username || 'N/A'}
-                        </h3>
-                        {profileData.bio && <p className="text-gray-600 mb-3 profile-bio">"{profileData.bio}"</p>}
+            <Card className="profile-card p-0 shadow-sm rounded-lg border-light-brown-100">
+                {/* Profile Header Section */}
+                <div className="profile-header-section p-4 bg-light-brown-50 rounded-top-lg">
+                    <div className="profile-avatar mb-3">
+                        {console.log("Profile.jsx: Image src being rendered:", getCacheBustedImageUrl(profileData.profileImage))}
+                        <img
+                            src={getCacheBustedImageUrl(profileData.profileImage)}
+                            alt="User Avatar"
+                            className="img-fluid rounded-circle profile-img"
+                            onError={(e) => { e.target.onerror = null; e.target.src = defaultProfileImage; }}
+                        />
                     </div>
+                    <h3 className="profile-username-display text-3xl font-bold text-brown-800 mb-2">
+                        {profileData.username || 'N/A'}
+                    </h3>
+                    {profileData.bio && <p className="text-gray-600 mb-3 profile-bio">"{profileData.bio}"</p>}
+                </div>
 
-                    {/* Profile Details Section */}
-                    <Card.Body className="profile-details-section p-4 text-left">
-                        <h4 className="text-xl font-semibold text-brown-800 mb-3 section-title">Account Details</h4>
-                        <ul className="list-unstyled profile-details-list">
-                            <li>
-                                <i className="fas fa-envelope profile-icon"></i>
-                                <strong>Email:</strong> <span className="detail-value">{profileData.email || 'N/A'}</span>
-                                {isCurrentUserProfile && profileData.email && ( // Only show copy for current user's own email
-                                    <i
-                                        className="fas fa-copy copy-icon ms-2"
-                                        onClick={() => handleCopyToClipboard(profileData.email, 'Email')}
-                                        title="Copy Email"
-                                    ></i>
-                                )}
-                            </li>
-                            <li>
-                                <i className="fas fa-id-badge profile-icon"></i>
-                                <strong>User ID:</strong> <span className="detail-value">{profileData._id || 'N/A'}</span>
-                                {isCurrentUserProfile && profileData._id && ( // Only show copy for current user's own ID
-                                    <i
-                                        className="fas fa-copy copy-icon ms-2"
-                                        onClick={() => handleCopyToClipboard(profileData._id, 'User ID')}
-                                        title="Copy User ID"
-                                    ></i>
-                                )}
-                            </li>
-                            {profileData.date && (
-                                <li>
-                                    <i className="fas fa-calendar-alt profile-icon"></i>
-                                    <strong>Member Since:</strong> <span className="detail-value">{getMemberSince(profileData.date)}</span>
-                                </li>
+                {/* Profile Details Section */}
+                <Card.Body className="profile-details-section p-4 text-left">
+                    <h4 className="text-xl font-semibold text-brown-800 mb-3 section-title">Account Details</h4>
+                    <ul className="list-unstyled profile-details-list">
+                        <li>
+                            <i className="fas fa-envelope profile-icon"></i>
+                            <strong>Email:</strong> <span className="detail-value">{profileData.email || 'N/A'}</span>
+                            {isCurrentUserProfile && profileData.email && (
+                                <i
+                                    className="fas fa-copy copy-icon ms-2"
+                                    onClick={() => handleCopyToClipboard(profileData.email, 'Email')}
+                                    title="Copy Email"
+                                ></i>
                             )}
-                            {profileData.role && (
-                                <li>
-                                    <i className="fas fa-user-tag profile-icon"></i>
-                                    <strong>Role:</strong> <span className="detail-value">{profileData.role.charAt(0).toUpperCase() + profileData.role.slice(1)}</span>
-                                </li>
+                        </li>
+                        <li>
+                            <i className="fas fa-id-badge profile-icon"></i>
+                            <strong>User ID:</strong> <span className="detail-value">{profileData.id || 'N/A'}</span> {/* Use profileData.id as set from Firestore doc.id */}
+                            {isCurrentUserProfile && profileData.id && (
+                                <i
+                                    className="fas fa-copy copy-icon ms-2"
+                                    onClick={() => handleCopyToClipboard(profileData.id, 'User ID')}
+                                    title="Copy User ID"
+                                ></i>
                             )}
-                        </ul>
-
-                        {/* Social Links Section - Conditionally rendered */}
-                        {hasSocialLinks && (
-                            <>
-                                <h4 className="text-xl font-semibold text-brown-800 mt-4 mb-3 section-title">Social Links</h4>
-                                <ul className="list-unstyled profile-details-list social-links-list">
-                                    {profileData.socialLinks.goodreads && (
-                                        <li>
-                                            <i className="fab fa-goodreads profile-icon social-icon goodreads-icon"></i>
-                                            <strong>Goodreads:</strong> <a href={profileData.socialLinks.goodreads} target="_blank" rel="noopener noreferrer" className="profile-link">{profileData.socialLinks.goodreads}</a>
-                                        </li>
-                                    )}
-                                    {profileData.socialLinks.twitter && (
-                                        <li>
-                                            <i className="fab fa-twitter profile-icon social-icon twitter-icon"></i>
-                                            <strong>Twitter:</strong> <a href={profileData.socialLinks.twitter} target="_blank" rel="noopener noreferrer" className="profile-link">{profileData.socialLinks.twitter}</a>
-                                        </li>
-                                    )}
-                                    {profileData.socialLinks.instagram && (
-                                        <li>
-                                            <i className="fab fa-instagram profile-icon social-icon instagram-icon"></i>
-                                            <strong>Instagram:</strong> <a href={profileData.socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="profile-link">{profileData.socialLinks.instagram}</a>
-                                        </li>
-                                    )}
-                                </ul>
-                            </>
+                        </li>
+                        {profileData.date && (
+                            <li>
+                                <i className="fas fa-calendar-alt profile-icon"></i>
+                                <strong>Member Since:</strong> <span className="detail-value">{getMemberSince(profileData.date)}</span>
+                            </li>
                         )}
-
-                        {/* Reading Snapshot Section */}
-                        <h4 className="text-xl font-semibold text-brown-800 mt-4 mb-3 section-title">Reading Snapshot</h4>
-                        {!hasReadingStats && ( // Show this message if no meaningful stats are present
-                            <div className="text-center p-3 bg-light-brown-50 rounded border border-light-brown-100 mb-3">
-                                <p className="text-gray-700 mb-0">
-                                    <i className="fas fa-book-reader me-2"></i>
-                                    Looks like your reading journey is just beginning!
-                                    Start logging books to see your amazing stats here.
-                                </p>
-                            </div>
+                        {profileData.role && (
+                            <li>
+                                <i className="fas fa-user-tag profile-icon"></i>
+                                <strong>Role:</strong> <span className="detail-value">{profileData.role.charAt(0).toUpperCase() + profileData.role.slice(1)}</span>
+                            </li>
                         )}
-                        <ul className="list-unstyled profile-details-list">
+                        {profileData.phoneNumber && ( // Display phone number if available
                             <li>
-                                <i className="fas fa-book-open profile-icon"></i>
-                                <strong>Books Finished:</strong> <span className="detail-value">{profileData.booksFinished || 0}</span>
+                                <i className="fas fa-phone profile-icon"></i>
+                                <strong>Phone:</strong> <span className="detail-value">{profileData.phoneNumber}</span>
                             </li>
-                            <li>
-                                <i className="fas fa-star profile-icon"></i>
-                                <strong>Average Rating:</strong> <span className="detail-value">{profileData.averageRating || 'N/A'}</span>
-                            </li>
-                            <li>
-                                <i className="fas fa-bookmark profile-icon"></i>
-                                <strong>Favorite Genre:</strong> <span className="detail-value">{profileData.favoriteGenre || 'N/A'}</span>
-                            </li>
-                        </ul>
-                    </Card.Body>
+                        )}
+                    </ul>
 
-                    {/* Profile Actions Section - Only show Edit Profile for the current user */}
-                    {isCurrentUserProfile && (
-                        <div className="profile-actions-section p-4 border-top border-light-brown-100 d-flex justify-content-center">
-                            <Button
-                                variant="primary"
-                                onClick={handleEditProfileClick}
-                                className="custom-button w-50 profile-edit-button"
-                            >
-                                <i className="fas fa-user-edit me-2"></i> Edit Profile
-                            </Button>
+                    {/* Social Links Section - Conditionally rendered */}
+                    {hasSocialLinks && (
+                        <>
+                            <h4 className="text-xl font-semibold text-brown-800 mt-4 mb-3 section-title">Social Links</h4>
+                            <ul className="list-unstyled profile-details-list social-links-list">
+                                {profileData.socialLinks.goodreads && (
+                                    <li>
+                                        <i className="fab fa-goodreads profile-icon social-icon goodreads-icon"></i>
+                                        <strong>Goodreads:</strong> <a href={profileData.socialLinks.goodreads} target="_blank" rel="noopener noreferrer" className="profile-link">{profileData.socialLinks.goodreads}</a>
+                                    </li>
+                                )}
+                                {profileData.socialLinks.twitter && (
+                                    <li>
+                                        <i className="fab fa-twitter profile-icon social-icon twitter-icon"></i>
+                                        <strong>Twitter:</strong> <a href={profileData.socialLinks.twitter} target="_blank" rel="noopener noreferrer" className="profile-link">{profileData.socialLinks.twitter}</a>
+                                    </li>
+                                )}
+                                {profileData.socialLinks.instagram && (
+                                    <li>
+                                        <i className="fab fa-instagram profile-icon social-icon instagram-icon"></i>
+                                        <strong>Instagram:</strong> <a href={profileData.socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="profile-link">{profileData.socialLinks.instagram}</a>
+                                    </li>
+                                )}
+                            </ul>
+                        </>
+                    )}
+
+                    {/* Reading Snapshot Section */}
+                    <h4 className="text-xl font-semibold text-brown-800 mt-4 mb-3 section-title">Reading Snapshot</h4>
+                    {!hasReadingStats && (
+                        <div className="text-center p-3 bg-light-brown-50 rounded border border-light-brown-100 mb-3">
+                            <p className="text-gray-700 mb-0">
+                                <i className="fas fa-book-reader me-2"></i>
+                                Looks like your reading journey is just beginning!
+                                Start logging books to see your amazing stats here.
+                            </p>
                         </div>
                     )}
-                </Card>
-            ) : (
-                <Alert variant="info" className="alert-minimal mb-0 text-center">
-                    No profile data available. Please ensure you are logged in.
-                </Alert>
-            )}
+                    <ul className="list-unstyled profile-details-list">
+                        <li>
+                            <i className="fas fa-book-open profile-icon"></i>
+                            <strong>Books Finished:</strong> <span className="detail-value">{profileData.booksFinished || 0}</span>
+                        </li>
+                        <li>
+                            <i className="fas fa-star profile-icon"></i>
+                            <strong>Average Rating:</strong> <span className="detail-value">{profileData.averageRating || 'N/A'}</span>
+                        </li>
+                        <li>
+                            <i className="fas fa-bookmark profile-icon"></i>
+                            <strong>Favorite Genre:</strong> <span className="detail-value">{profileData.favoriteGenre || 'N/A'}</span>
+                        </li>
+                    </ul>
+                </Card.Body>
+
+                {/* Profile Actions Section - Only show Edit Profile for the current user */}
+                {isCurrentUserProfile && (
+                    <div className="profile-actions-section p-4 border-top border-light-brown-100 d-flex justify-content-center">
+                        <Button
+                            variant="primary"
+                            onClick={handleEditProfileClick}
+                            className="custom-button w-50 profile-edit-button"
+                        >
+                            <i className="fas fa-user-edit me-2"></i> Edit Profile
+                        </Button>
+                    </div>
+                )}
+            </Card>
 
             {/* Edit Profile Modal (only shown for current user) */}
             {isCurrentUserProfile && (
