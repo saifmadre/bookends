@@ -1,16 +1,16 @@
 // src/contexts/AuthContext.js
 
 import { getApp, getApps, initializeApp } from 'firebase/app';
-import { createUserWithEmailAndPassword, getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { createUserWithEmailAndPassword, getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc, getFirestore, setDoc } from 'firebase/firestore';
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'; // Added useRef
 
 const AuthContext = createContext(null);
 
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
 const hardcodedFirebaseConfig = {
-    apiKey: "AIzaSyCHsj6GgNIz123WiXdHoNZn57mqGbCrBCI",
+    apiKey: "AIzaSyCHsj6GgNIz123WiXdHoNZn57mqGbCrBCI", // IMPORTANT: Ensure this is your actual Firebase API key!
     authDomain: "bookends-e027a.firebaseapp.com",
     projectId: "bookends-e027a",
     storageBucket: "bookends-e027a.appspot.com",
@@ -20,27 +20,23 @@ const hardcodedFirebaseConfig = {
 
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : hardcodedFirebaseConfig;
 
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-// --- Firebase App Initialization (Ensured Once for the entire app) ---
 let app;
 if (!getApps().length) {
-    console.log("AuthContext: Initializing Firebase app with provided config.");
+    console.log("[AuthContext Init] Initializing Firebase app with provided config.");
     app = initializeApp(firebaseConfig);
 } else {
-    console.log("AuthContext: Firebase app already exists, retrieving existing app instance.");
     try {
         app = getApp();
+        console.log("[AuthContext Init] Firebase app already exists, retrieving existing app instance.");
     } catch (e) {
-        console.error("AuthContext: Error retrieving existing Firebase app:", e);
+        console.error("[AuthContext Init] Error retrieving existing Firebase app:", e);
         throw new Error("AuthContext: Failed to get existing Firebase app. Check for multiple initializations or misconfigurations.");
     }
 }
 
 const auth = getAuth(app);
 const db = getFirestore(app);
-console.log("AuthContext: Firebase Auth and Firestore services are ready.");
-// --- End Firebase App Initialization ---
+console.log("[AuthContext Init] Firebase Auth and Firestore services are ready.");
 
 export const useAuth = () => {
     const context = useContext(AuthContext);
@@ -51,126 +47,115 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null); // Custom profile from Firestore
-    const [firebaseUser, setFirebaseUser] = useState(null); // Raw Firebase Auth user
-    const [userId, setUserId] = useState(null); // Firebase UID
-    const [isAuthenticated, setIsAuthenticated] = useState(false); // Application-level auth status
-    const [loading, setLoading] = useState(true); // Initial auth check loading
+    const [user, setUser] = useState(null);
+    const [firebaseUser, setFirebaseUser] = useState(null);
+    const [userId, setUserId] = useState(null);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [isRegistering, setIsRegistering] = useState(false);
     const [isLoggingIn, setIsLoggingIn] = useState(false);
-
-    // Flag to prevent anonymous re-login right after explicit logout
     const [isManuallyLoggedOut, setIsManuallyLoggedOut] = useState(false);
 
-    /**
-     * loadUserProfile: Fetches a user's custom profile data from Firestore.
-     * Sets the `user` state. Also determines if the user is `isAuthenticated`
-     * from the application's perspective (i.e., has a real profile).
-     * @param {object} firebaseAuthUser - The user object directly from Firebase Auth.
-     */
+    // Promise and its resolver to signal when auth state has been fully determined/updated
+    const authPromiseResolveRef = useRef(null);
+    const [authReadyPromise, setAuthReadyPromise] = useState(() => new Promise(resolve => {
+        authPromiseResolveRef.current = resolve;
+    }));
+
+    // Function to resolve the current authReadyPromise and create a new one for next changes
+    const resolveAndResetAuthReadyPromise = useCallback(() => {
+        if (authPromiseResolveRef.current) {
+            authPromiseResolveRef.current(); // Resolve the current promise
+            console.log("[AuthContext Promise] authReadyPromise resolved.");
+        }
+        // Create a new promise for future state changes
+        setAuthReadyPromise(new Promise(resolve => {
+            authPromiseResolveRef.current = resolve;
+        }));
+        console.log("[AuthContext Promise] New authReadyPromise created.");
+    }, []);
+
     const loadUserProfile = useCallback(async (firebaseAuthUser) => {
+        console.log(`[loadUserProfile] Called with firebaseAuthUser: ${firebaseAuthUser ? firebaseAuthUser.uid : 'null'}`);
         if (!firebaseAuthUser) {
             setUser(null);
             setIsAuthenticated(false);
-            setUserId(null); // Ensure userId is null if no user
-            console.log("AuthContext: loadUserProfile called with no Firebase Auth user. State cleared.");
+            setUserId(null);
+            console.log("[loadUserProfile] No Firebase Auth user, clearing states.");
             return;
         }
 
         const uid = firebaseAuthUser.uid;
-        setUserId(uid); // Always set userId from the Firebase Auth user
+        setUserId(uid);
+        console.log(`[loadUserProfile] Setting userId: ${uid}`);
 
         try {
-            console.log(`AuthContext: Attempting to load user profile for UID: ${uid} from Firestore.`);
+            console.log(`[loadUserProfile] Attempting to load custom profile for UID: ${uid}`);
             const userProfileDocRef = doc(db, `artifacts/${appId}/users`, uid);
             const userProfileDocSnap = await getDoc(userProfileDocRef);
 
             if (userProfileDocSnap.exists()) {
                 const profileData = userProfileDocSnap.data();
                 setUser({ ...profileData, id: uid });
-                // Only set isAuthenticated to true if a non-anonymous user is signed in OR a profile exists
-                setIsAuthenticated(!firebaseAuthUser.isAnonymous);
-                console.log(`AuthContext: User profile loaded for UID: ${uid}. Username: ${profileData.username || 'N/A'}. IsAuthenticated: ${!firebaseAuthUser.isAnonymous}`);
+                const newIsAuthenticated = !firebaseAuthUser.isAnonymous;
+                setIsAuthenticated(newIsAuthenticated);
+                console.log(`[loadUserProfile] Profile loaded for UID: ${uid}. Username: ${profileData.username || 'N/A'}. Setting isAuthenticated: ${newIsAuthenticated}`);
             } else {
-                // If Firebase Auth user exists but no custom profile:
-                // For non-anonymous users, this might indicate incomplete registration.
-                // For anonymous users, this is expected.
-                console.warn(`AuthContext: No custom Firestore profile found for UID: ${uid}.`);
+                console.warn(`[loadUserProfile] No custom Firestore profile found for UID: ${uid}.`);
                 setUser({
                     id: uid,
                     username: firebaseAuthUser.email || `User_${uid.substring(0, 6)}`,
                     email: firebaseAuthUser.email || null,
-                    role: 'user', // Default role
-                    date: new Date().toISOString() // Approximate registration date
+                    role: 'user',
+                    date: new Date().toISOString()
                 });
-                // Keep isAuthenticated as false for anonymous users or incomplete profiles
                 setIsAuthenticated(!firebaseAuthUser.isAnonymous);
+                console.log(`[loadUserProfile] No custom profile, setting user with Firebase Auth data. isAuthenticated: ${!firebaseAuthUser.isAnonymous}`);
             }
         } catch (err) {
-            console.error(`AuthContext: Error loading user profile for UID ${uid} from Firestore:`, err);
+            console.error(`[loadUserProfile] Error loading user profile for UID ${uid}:`, err);
             setUser(null);
-            setIsAuthenticated(false); // Explicitly set to false on profile load error
+            setIsAuthenticated(false);
         }
-    }, [appId, db]); // Dependencies: appId and db
+    }, [appId, db]);
 
     useEffect(() => {
+        console.log("[onAuthStateChanged Effect] Initializing listener.");
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            console.log("AuthContext: onAuthStateChanged callback triggered. Firebase Auth User:", user ? user.uid : "None");
+            console.log(`[onAuthStateChanged] Callback triggered. Firebase Auth User: ${user ? user.uid : 'None'}`);
             setFirebaseUser(user);
 
             if (user) {
-                // If a Firebase user is signed in (could be anonymous from initial token)
-                await loadUserProfile(user); // Load or create their custom profile based on this Firebase user
-                setIsManuallyLoggedOut(false); // Reset logout flag on any successful sign-in
+                console.log('[onAuthStateChanged] Firebase user detected. Calling loadUserProfile.');
+                await loadUserProfile(user);
+                setIsManuallyLoggedOut(false);
             } else {
-                // If no Firebase user is currently signed in
-                if (!isManuallyLoggedOut) {
-                    console.log('AuthContext: No Firebase user. Attempting initial anonymous or custom token login (if not manually logged out).');
-                    try {
-                        if (initialAuthToken) {
-                            const customTokenUserCredential = await signInWithCustomToken(auth, initialAuthToken);
-                            console.log('AuthContext: Successfully signed in with custom token.');
-                            await loadUserProfile(customTokenUserCredential.user);
-                        } else {
-                            const anonymousUserCredential = await signInAnonymously(auth);
-                            console.log('AuthContext: Successfully signed in anonymously. UID:', anonymousUserCredential.user.uid);
-                            await loadUserProfile(anonymousUserCredential.user); // Load profile for this anonymous user
-                        }
-                    } catch (error) {
-                        console.error("AuthContext: Firebase initial authentication (anonymous/custom token) failed:", error);
-                        // If even anonymous/custom token auth fails, ensure states are cleared
-                        setUser(null);
-                        setFirebaseUser(null);
-                        setUserId(null);
-                        setIsAuthenticated(false);
-                    }
-                } else {
-                    console.log("AuthContext: User explicitly logged out. Not attempting anonymous/custom token login.");
-                    // Ensure all user states are cleared after manual logout
-                    setUser(null);
-                    setFirebaseUser(null);
-                    setUserId(null);
-                    setIsAuthenticated(false);
-                }
+                console.log('[onAuthStateChanged] No Firebase user detected. Clearing all auth states.');
+                setUser(null);
+                setFirebaseUser(null);
+                setUserId(null);
+                setIsAuthenticated(false);
+                setIsManuallyLoggedOut(false);
             }
-            setLoading(false); // Authentication check is complete
-            console.log("AuthContext: Authentication loading state set to false.");
+            setLoading(false);
+            console.log(`[onAuthStateChanged] Auth loading set to false. Final isAuthenticated (after loadUserProfile): ${user ? !user.isAnonymous : false}`); // Log current effective state
+            resolveAndResetAuthReadyPromise(); // Signal that auth state has been processed
         });
 
         return () => {
-            console.log("AuthContext: Unsubscribing from onAuthStateChanged listener.");
+            console.log("[onAuthStateChanged Effect] Unsubscribing listener.");
             unsubscribe();
         };
-    }, [initialAuthToken, loadUserProfile, isManuallyLoggedOut]);
+    }, [loadUserProfile, resolveAndResetAuthReadyPromise]); // Depend on loadUserProfile and the new resolver
 
     const register = async ({ username, email, password, phoneNumber }) => {
         setIsRegistering(true);
         try {
-            console.log('AuthContext: Attempting Firebase registration for email:', email);
+            console.log('[AuthContext - Register] Attempting Firebase registration for email:', email);
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const uid = userCredential.user.uid;
 
-            console.log('AuthContext: Firebase user created successfully with UID:', uid);
+            console.log('[AuthContext - Register] Firebase user created successfully with UID:', uid);
 
             const userProfileDocRef = doc(db, `artifacts/${appId}/users`, uid);
             await setDoc(userProfileDocRef, {
@@ -180,13 +165,14 @@ export const AuthProvider = ({ children }) => {
                 role: 'user',
                 date: new Date().toISOString()
             });
-            console.log('AuthContext: User profile saved to Firestore for UID:', uid);
+            console.log('[AuthContext - Register] User profile saved to Firestore for UID:', uid);
 
-            setIsManuallyLoggedOut(false); // Reset logout flag upon successful registration/login
-            // onAuthStateChanged will pick up the new user and load profile.
+            await authReadyPromise; // <--- CRITICAL: Wait for onAuthStateChanged to process and set state
+            console.log('[AuthContext - Register] Auth state fully propagated after registration.');
+
             return { success: true, uid: uid };
         } catch (err) {
-            console.error('AuthContext: Firebase registration error:', err.message, err.code);
+            console.error('[AuthContext - Register] Firebase registration error:', err.message, err.code);
             throw err;
         } finally {
             setIsRegistering(false);
@@ -196,14 +182,16 @@ export const AuthProvider = ({ children }) => {
     const login = async ({ identifier, password }) => {
         setIsLoggingIn(true);
         try {
-            console.log('AuthContext: Attempting Firebase login for identifier (email):', identifier);
+            console.log('[AuthContext - Login] Attempting Firebase login for identifier:', identifier);
             await signInWithEmailAndPassword(auth, identifier, password);
-            console.log('AuthContext: Firebase login successful.');
-            setIsManuallyLoggedOut(false); // Reset logout flag upon successful registration/login
-            // onAuthStateChanged will handle state updates.
+            console.log('[AuthContext - Login] Firebase login successful.');
+
+            await authReadyPromise; // <--- CRITICAL: Wait for onAuthStateChanged to process and set state
+            console.log('[AuthContext - Login] Auth state fully propagated after login.');
+
             return { success: true };
         } catch (err) {
-            console.error('AuthContext: Firebase login error:', err.message, err.code);
+            console.error('[AuthContext - Login] Firebase login error:', err.message, err.code);
             throw err;
         } finally {
             setIsLoggingIn(false);
@@ -212,14 +200,13 @@ export const AuthProvider = ({ children }) => {
 
     const logout = async () => {
         try {
-            console.log('AuthContext: Attempting Firebase logout.');
-            setIsManuallyLoggedOut(true); // Set the flag *before* signing out
+            console.log('[AuthContext - Logout] Attempting Firebase logout.');
+            setIsManuallyLoggedOut(true);
             await signOut(auth);
-            console.log('AuthContext: User logged out successfully from Firebase.');
-            // States will be cleared by onAuthStateChanged due to isManuallyLoggedOut flag
+            console.log('[AuthContext - Logout] User logged out successfully from Firebase.');
         } catch (error) {
-            console.error('AuthContext: Error during logout:', error);
-            setIsManuallyLoggedOut(false); // Reset flag if logout fails
+            console.error('[AuthContext - Logout] Error during logout:', error);
+            setIsManuallyLoggedOut(false);
             throw error;
         }
     };
@@ -238,6 +225,11 @@ export const AuthProvider = ({ children }) => {
         db,
         auth
     };
+
+    useEffect(() => {
+        console.log(`[AuthContext Provider Value Update] isAuthenticated: ${isAuthenticated}, userId: ${userId}, user: ${user ? user.username : 'null'}, loading: ${loading}`);
+    }, [isAuthenticated, userId, user, loading]);
+
 
     return (
         <AuthContext.Provider value={authContextValue}>
