@@ -9,8 +9,9 @@ const AuthContext = createContext(null);
 
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
+// Define hardcoded config for local development/Canvas preview only
 const hardcodedFirebaseConfig = {
-    apiKey: "AIzaSyCHsj6GgNIz123WiXdHoNZn57mqGbCrBCI", // IMPORTANT: Ensure this is your actual Firebase API key!
+    apiKey: "AIzaSyCHsj6GgNIz123WiXdHoNZn57mqGbCrBCI", // IMPORTANT: Keep your actual API key here for local testing.
     authDomain: "bookends-e027a.firebaseapp.com",
     projectId: "bookends-e027a",
     storageBucket: "bookends-e027a.appspot.com",
@@ -18,7 +19,27 @@ const hardcodedFirebaseConfig = {
     appId: "1:693810748587:web:c1c6ac0602c0c7e74f2bee",
 };
 
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : hardcodedFirebaseConfig;
+// Check for Vercel environment variable first, then fallback to local hardcoded config
+let firebaseConfig;
+try {
+    // Vercel injects environment variables as process.env.YOUR_VAR_NAME
+    // We assume the user has set FIREBASE_CONFIG in Vercel.
+    if (typeof process !== 'undefined' && process.env.FIREBASE_CONFIG) {
+        firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG);
+        console.log("[AuthContext Init] Using Firebase config from Vercel environment variable.");
+    } else if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+        // This block is primarily for the Canvas environment if it directly injects __firebase_config
+        firebaseConfig = JSON.parse(__firebase_config);
+        console.log("[AuthContext Init] Using Firebase config from Canvas '__firebase_config'.");
+    } else {
+        firebaseConfig = hardcodedFirebaseConfig;
+        console.log("[AuthContext Init] Using hardcoded Firebase config (local development fallback).");
+    }
+} catch (e) {
+    console.error("[AuthContext Init] Error parsing Firebase config from environment. Falling back to hardcoded.", e);
+    firebaseConfig = hardcodedFirebaseConfig;
+}
+
 
 let app;
 if (!getApps().length) {
@@ -138,15 +159,15 @@ export const AuthProvider = ({ children }) => {
                 setIsManuallyLoggedOut(false);
             }
             setLoading(false);
-            console.log(`[onAuthStateChanged] Auth loading set to false. Final isAuthenticated (after loadUserProfile): ${user ? !user.isAnonymous : false}`); // Log current effective state
-            resolveAndResetAuthReadyPromise(); // Signal that auth state has been processed
+            console.log(`[onAuthStateChanged] Auth loading set to false. Final isAuthenticated (after loadUserProfile): ${user ? !user.isAnonymous : false}`);
+            resolveAndResetAuthReadyPromise();
         });
 
         return () => {
             console.log("[onAuthStateChanged Effect] Unsubscribing listener.");
             unsubscribe();
         };
-    }, [loadUserProfile, resolveAndResetAuthReadyPromise]); // Depend on loadUserProfile and the new resolver
+    }, [loadUserProfile, resolveAndResetAuthReadyPromise]);
 
     const register = async ({ username, email, password, phoneNumber }) => {
         setIsRegistering(true);
@@ -167,7 +188,7 @@ export const AuthProvider = ({ children }) => {
             });
             console.log('[AuthContext - Register] User profile saved to Firestore for UID:', uid);
 
-            await authReadyPromise; // <--- CRITICAL: Wait for onAuthStateChanged to process and set state
+            await authReadyPromise;
             console.log('[AuthContext - Register] Auth state fully propagated after registration.');
 
             return { success: true, uid: uid };
@@ -186,7 +207,7 @@ export const AuthProvider = ({ children }) => {
             await signInWithEmailAndPassword(auth, identifier, password);
             console.log('[AuthContext - Login] Firebase login successful.');
 
-            await authReadyPromise; // <--- CRITICAL: Wait for onAuthStateChanged to process and set state
+            await authReadyPromise;
             console.log('[AuthContext - Login] Auth state fully propagated after login.');
 
             return { success: true };
