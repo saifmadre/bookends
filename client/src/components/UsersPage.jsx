@@ -1,7 +1,7 @@
 // src/components/UsersPage.jsx
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Button, Card, Container, Spinner, Tab, Tabs } from 'react-bootstrap';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom'; // Import Link for clickable user cards
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import SearchInput from './SearchInput.jsx'; // Reusing the SearchInput component
@@ -15,7 +15,6 @@ const UserCard = ({ user, currentUser, relationships, onFollow, onUnfollow, onAc
     const isFollowing = following.some(f => f._id === user._id);
     const hasSentRequest = following.some(f => f._id === user._id && f.status === 'pending');
     const hasIncomingRequest = pendingRequests.some(r => r._id === user._id);
-    const isFollower = followers.some(f => f._id === user._id);
 
     let buttonContent;
     let buttonVariant;
@@ -24,7 +23,7 @@ const UserCard = ({ user, currentUser, relationships, onFollow, onUnfollow, onAc
 
     if (user._id === currentUser.id) {
         buttonContent = 'Your Profile';
-        buttonVariant = 'outline-secondary'; // Changed to outline for user's own profile
+        buttonVariant = 'outline-secondary';
         buttonDisabled = true;
     } else if (hasIncomingRequest) {
         buttonContent = (
@@ -36,7 +35,7 @@ const UserCard = ({ user, currentUser, relationships, onFollow, onUnfollow, onAc
         buttonVariant = null; // No single variant for a group of buttons
     } else if (hasSentRequest) {
         buttonContent = 'Request Sent';
-        buttonVariant = 'outline-info'; // Changed to outline for consistency
+        buttonVariant = 'outline-info';
         buttonDisabled = true;
     } else if (isFollowing) {
         buttonContent = 'Following';
@@ -54,10 +53,13 @@ const UserCard = ({ user, currentUser, relationships, onFollow, onUnfollow, onAc
     return (
         <Card className="user-card p-4 shadow-sm rounded-lg h-100 d-flex flex-column justify-content-between hover:shadow-md transition-shadow duration-200 border-light-brown-100">
             <Card.Body className="d-flex flex-column align-items-center text-center">
-                <div className="user-avatar mb-3">
-                    {userAvatar}
-                </div>
-                <Card.Title className="text-xl font-bold text-brown-800 mb-1">{user.username}</Card.Title>
+                {/* Make the user avatar and username clickable to view profile */}
+                <Link to={`/profile/${user._id}`} className="user-card-link">
+                    <div className="user-avatar mb-3">
+                        {userAvatar}
+                    </div>
+                    <Card.Title className="text-xl font-bold text-brown-800 mb-1 user-card-username">{user.username}</Card.Title>
+                </Link>
                 <Card.Subtitle className="mb-3 text-muted text-sm">{user.email}</Card.Subtitle>
                 {user.role && <span className="badge bg-secondary mb-3">{user.role.charAt(0).toUpperCase() + user.role.slice(1)}</span>}
             </Card.Body>
@@ -85,7 +87,6 @@ const UserCard = ({ user, currentUser, relationships, onFollow, onUnfollow, onAc
 const UsersPage = () => {
     const { user, isAuthenticated, token, loading: authLoading } = useAuth();
     const { showToast } = useToast();
-    const navigate = useNavigate();
 
     const [allUsers, setAllUsers] = useState([]);
     const [loadingAllUsers, setLoadingAllUsers] = useState(true);
@@ -109,7 +110,6 @@ const UsersPage = () => {
         setLoadingAllUsers(true);
         setErrorAllUsers('');
 
-        // CRITICAL FIX: Ensure authLoading is false AND isAuthenticated is true AND token exists
         if (authLoading || !isAuthenticated || !token) {
             console.log('UsersPage: fetchAllUsers skipped - Auth not ready or not authenticated.');
             setErrorAllUsers('You must be logged in to view other users.');
@@ -120,7 +120,7 @@ const UsersPage = () => {
         try {
             const url = `http://localhost:5000/api/social/users`;
             console.log('UsersPage: Fetching all discoverable users from:', url);
-            console.log('UsersPage: Sending x-auth-token:', token.substring(0, 10) + '...'); // Log first 10 chars of token
+            console.log('UsersPage: Sending x-auth-token:', token.substring(0, 10) + '...');
 
             const response = await fetch(url, {
                 headers: {
@@ -130,10 +130,9 @@ const UsersPage = () => {
             const data = await response.json();
 
             if (response.ok) {
-                // Filter out the current user from the list of all users
                 const usersWithoutCurrentUser = data.filter(u => u._id !== user.id);
                 setAllUsers(usersWithoutCurrentUser);
-                setFilteredUsers(usersWithoutCurrentUser); // Initialize filtered users with all users
+                setFilteredUsers(usersWithoutCurrentUser);
                 console.log('UsersPage: Successfully fetched all users. Count:', usersWithoutCurrentUser.length);
             } else {
                 console.error('UsersPage: Error fetching all users:', data.msg || response.statusText);
@@ -194,10 +193,9 @@ const UsersPage = () => {
             fetchAllUsers();
             fetchRelationships();
         } else if (!authLoading && (!isAuthenticated || !user?.id || !token)) {
-            // If authentication is not ready or failed after authLoading is done
             setErrorAllUsers('You must be logged in to view other users.');
             setLoadingAllUsers(false);
-            setAllUsers([]); // Clear any stale data
+            setAllUsers([]);
             setFilteredUsers([]);
             setRelationships({ following: [], pendingRequests: [], followers: [] });
             console.log('UsersPage: Not authenticated, clearing user data and setting error.');
@@ -238,7 +236,7 @@ const UsersPage = () => {
             const data = await response.json();
             if (response.ok) {
                 showToast(data.msg, 'success', 'Success');
-                fetchRelationships(); // Refresh relationships to update UI
+                fetchRelationships();
             } else {
                 showToast(data.msg || 'Failed to send follow request.', 'danger', 'Error');
             }
@@ -264,7 +262,7 @@ const UsersPage = () => {
             const data = await response.json();
             if (response.ok) {
                 showToast(data.msg, 'success', 'Success');
-                fetchRelationships(); // Refresh relationships to update UI
+                fetchRelationships();
             } else {
                 showToast(data.msg || 'Failed to unfollow user.', 'danger', 'Error');
             }
@@ -294,7 +292,7 @@ const UsersPage = () => {
             const data = await response.json();
             if (response.ok) {
                 showToast(data.msg, 'success', 'Success');
-                fetchRelationships(); // Refresh relationships to update UI
+                fetchRelationships();
             } else {
                 showToast(data.msg || `Failed to ${action} request.`, 'danger', 'Error');
             }
@@ -311,7 +309,7 @@ const UsersPage = () => {
         }
         try {
             const response = await fetch(`http://localhost:5000/api/social/remove-follower/${followerId}`, {
-                method: 'POST', // Assuming POST for state change
+                method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'x-auth-token': token,
@@ -320,7 +318,7 @@ const UsersPage = () => {
             const data = await response.json();
             if (response.ok) {
                 showToast(data.msg, 'success', 'Success');
-                fetchRelationships(); // Refresh relationships to update UI
+                fetchRelationships();
             } else {
                 showToast(data.msg || 'Failed to remove follower.', 'danger', 'Error');
             }
@@ -335,21 +333,21 @@ const UsersPage = () => {
         if (loadingAllUsers && type === 'discover') {
             return (
                 <div className="text-center p-4">
-                    <Spinner animation="border" role="status" style={{ color: '#5a4434' }}>
+                    <Spinner animation="border" role="status" className="spinner-minimal">
                         <span className="visually-hidden">Loading users...</span>
                     </Spinner>
-                    <p className="text-gray-700 mt-3">Loading users for discovery...</p>
+                    <p className="loading-text mt-3">Loading users for discovery...</p>
                 </div>
             );
         }
 
         if (errorAllUsers && type === 'discover') {
-            return <Alert variant="danger" className="text-center mt-4">{errorAllUsers}</Alert>;
+            return <Alert variant="danger" className="alert-minimal alert-danger text-center mt-4">{errorAllUsers}</Alert>;
         }
 
         if (!isAuthenticated) {
             return (
-                <Alert variant="info" className="text-center mt-4">
+                <Alert variant="info" className="alert-minimal text-center mt-4">
                     Please log in to view and interact with other users.
                 </Alert>
             );
@@ -363,7 +361,7 @@ const UsersPage = () => {
             if (type === 'requests') message = 'No pending follow requests.';
 
             return (
-                <div className="text-center p-4 bg-light-brown-100 rounded border border-light-brown mt-4">
+                <div className="text-center p-4 bg-light-brown-50 rounded border border-light-brown-100 mt-4">
                     <p className="text-gray-700">{message}</p>
                 </div>
             );
@@ -382,7 +380,7 @@ const UsersPage = () => {
                         onAccept={handleRespondToRequest}
                         onReject={handleRespondToRequest}
                         onRemoveFollower={handleRemoveFollower}
-                        onRespondToRequest={handleRespondToRequest} // Pass this for accept/reject
+                        onRespondToRequest={handleRespondToRequest}
                     />
                 ))}
             </div>
@@ -391,21 +389,21 @@ const UsersPage = () => {
 
 
     return (
-        <Container className="my-5 p-4 rounded-xl shadow-lg bg-light-brown-100 text-center">
-            <h2 className="mb-5 text-4xl font-extrabold text-brown-900">
+        <Container className="profile-container my-5 p-4 rounded-xl shadow-lg bg-light-brown-100 text-center">
+            <h2 className="mb-5 text-4xl font-extrabold text-brown-900 profile-title">
                 Connect with Other Readers
             </h2>
 
             {!isAuthenticated && !authLoading ? (
-                <Alert variant="warning" className="mt-4 text-lg text-center bg-yellow-100 border-yellow-200 text-yellow-800">
+                <Alert variant="warning" className="alert-minimal alert-warning mt-4 text-center">
                     Please log in to discover and connect with other users.
                 </Alert>
             ) : authLoading ? (
                 <div className="text-center p-4">
-                    <Spinner animation="border" role="status" style={{ color: '#5a4434' }}>
+                    <Spinner animation="border" role="status" className="spinner-minimal">
                         <span className="visually-hidden">Loading authentication...</span>
                     </Spinner>
-                    <p className="text-gray-700 mt-3">Verifying authentication status...</p>
+                    <p className="loading-text mt-3">Verifying authentication status...</p>
                 </div>
             ) : (
                 <>
@@ -417,31 +415,32 @@ const UsersPage = () => {
                     >
                         <Tab eventKey="discover" title="Discover Users">
                             <div className="p-4 bg-white rounded shadow-md border-0 text-left">
-                                <h4 className="text-2xl font-semibold text-brown-800 mb-4">Find New Connections</h4>
+                                <h4 className="text-2xl font-semibold text-brown-800 mb-4 section-title">Find New Connections</h4>
                                 <SearchInput
                                     searchTerm={searchTerm}
                                     onSearchTermChange={setSearchTerm}
                                     onSearch={handleSearch}
                                     placeholder="Search by username or email..."
+                                    className="form-control-minimal"
                                 />
                                 {renderUserList(filteredUsers, 'discover')}
                             </div>
                         </Tab>
                         <Tab eventKey="following" title="Following">
                             <div className="p-4 bg-white rounded shadow-md border-0 text-left">
-                                <h4 className="text-2xl font-semibold text-brown-800 mb-4">Users You Follow</h4>
+                                <h4 className="text-2xl font-semibold text-brown-800 mb-4 section-title">Users You Follow</h4>
                                 {renderUserList(relationships.following, 'following')}
                             </div>
                         </Tab>
                         <Tab eventKey="followers" title="Followers">
                             <div className="p-4 bg-white rounded shadow-md border-0 text-left">
-                                <h4 className="text-2xl font-semibold text-brown-800 mb-4">Your Followers</h4>
+                                <h4 className="text-2xl font-semibold text-brown-800 mb-4 section-title">Your Followers</h4>
                                 {renderUserList(relationships.followers, 'followers')}
                             </div>
                         </Tab>
                         <Tab eventKey="requests" title={`Requests (${relationships.pendingRequests.length})`}>
                             <div className="p-4 bg-white rounded shadow-md border-0 text-left">
-                                <h4 className="text-2xl font-semibold text-brown-800 mb-4">Pending Follow Requests</h4>
+                                <h4 className="text-2xl font-semibold text-brown-800 mb-4 section-title">Pending Follow Requests</h4>
                                 {renderUserList(relationships.pendingRequests, 'requests')}
                             </div>
                         </Tab>
@@ -450,64 +449,124 @@ const UsersPage = () => {
             )}
 
             <style jsx>{`
+                /* Font Imports for a more intriguing look */
+                @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Lora:wght@400;600&display=swap');
+
+                /* Color Palette Variables (consistent with Dashboard and Profile) */
+                :root {
+                    --primary-brown: #5A4434; /* Dark Brown */
+                    --secondary-brown: #7B6A5A; /* Medium Brown */
+                    --light-brown-100: #F8F4ED; /* Lightest Beige */
+                    --light-brown-50: #FDFBF5;  /* Off-white */
+                    --border-color: #E0D9C8;    /* Muted border */
+                    --accent-gold: #D4AF37;     /* Gold for highlights */
+                    --text-dark: #4A382E;       /* Very dark brown for main text */
+                    --text-medium: #4A5568;     /* Grayish-brown for secondary text */
+                    --text-light: #718096;      /* Lighter gray for subtle text */
+                    --shadow-color: rgba(0, 0, 0, 0.1);
+                }
+
                 /* General Container and Text Styles */
-                .bg-light-brown-100 { background-color: #f8f4ed; }
-                .text-brown-800 { color: #5a4434; }
-                .text-brown-900 { color: #4a382e; }
-                .text-gray-700 { color: #4a5568; }
-                .text-gray-600 { color: #718096; }
-                .text-gray-500 { color: #a0aec0; }
-                .border-light-brown { border-color: #d4c7b8; }
-                .border-light-brown-100 { border-color: #e0d9c8; }
-                .bg-light-brown-50 { background-color: #fdfbf5; }
+                .profile-container { /* Reusing profile-container for consistent page wrapper */
+                    background-color: var(--light-brown-100);
+                    padding: 2.5rem !important;
+                    border-radius: 1.5rem !important;
+                    box-shadow: 0 10px 25px var(--shadow-color);
+                    background-image: url('data:image/svg+xml,%3Csvg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd"%3E%3Cg fill="%23e0d9c8" fill-opacity="0.4"%3E%3Cpath d="M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zm0 20v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0 20v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM6 54v-4H4v4H0v2h4v4h2v-4h4v-2H6zm0-20v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 14v-4H4v4H0v2h4v4h2v-4h4v-2H6zm30 0v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM18 54v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-20v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-20v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM48 54v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-20v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-20v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM0 36v-2h2v2H0zm0 20v-2h2v2H0zm0-10v-2h2v2H0zm0-10v-2h2v2H0zm0-10v-2h2v2H0zm0-10v-2h2v2H0zm12 20v-2h2v2h-2zm0 20v-2h2v2h-2zm0-10v-2h2v2h-2zm0-10v-2h2v2h-2zm0-10v-2h2v2h-2zm0-10v-2h2v2h-2zm12 20v-2h2v2h-2zm0 20v-2h2v2h-2zm0-10v-2h2v2h-2zm0-10v-2h2v2h-2zm0-10v-2h2v2h-2zm0-10v-2h2v2h-2zm12 20v-2h2v2h-2zm0 20v-2h2v2h-2zm0-10v-2h2v2h-2zm0-10v-2h2v2h-2zm0-10v-2h2v2h-2zm0-10v-2h2v2h-2zm12 20v-2h2v2h-2zm0 20v-2h2v2h-2zm0-10v-2h2v2h-2zm0-10v-2h2v2h-2zm0-10v-2h2v2h-2zm0-10v-2h2v2h-2z"%3E%3C/g%3E%3C/g%3E%3C/svg%3E');
+                    background-repeat: repeat;
+                }
+
+                .profile-title { /* Reusing profile-title for consistent page title */
+                    font-family: 'Playfair Display', serif;
+                    color: var(--text-dark);
+                    letter-spacing: 0.05em;
+                    font-size: 3.5rem !important;
+                    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+                }
+
+                .section-title { /* Reusing section-title for consistent sub-headings */
+                    font-family: 'Playfair Display', serif;
+                    color: var(--primary-brown);
+                    font-size: 1.8rem !important;
+                    margin-bottom: 1.5rem !important;
+                    position: relative;
+                    padding-bottom: 0.5rem;
+                }
+                .section-title::after {
+                    content: '';
+                    position: absolute;
+                    left: 0;
+                    bottom: 0;
+                    width: 50px;
+                    height: 3px;
+                    background-color: var(--accent-gold);
+                    border-radius: 2px;
+                }
 
                 /* User Card Styles */
                 .user-card {
-                    border: 1px solid #e0d9c8;
+                    border: 1px solid var(--border-color); /* Consistent border */
                     background-color: #ffffff;
-                    border-radius: 0.75rem; /* More rounded corners */
-                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); /* Softer shadow */
+                    border-radius: 0.75rem;
+                    box-shadow: 0 4px 12px var(--shadow-color);
+                    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; /* Smooth transitions */
                 }
                 .user-card:hover {
-                    transform: translateY(-5px); /* More pronounced lift on hover */
-                    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15); /* Stronger shadow on hover */
+                    transform: translateY(-5px);
+                    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
                 }
                 .user-avatar {
                     width: 70px;
                     height: 70px;
                     border-radius: 50%;
-                    background-color: #d4c7b8; /* Light brown background for avatar */
-                    color: #5a4434; /* Dark brown text */
+                    background-color: var(--secondary-brown); /* Consistent with profile avatar fallback */
+                    color: white;
                     display: flex;
                     justify-content: center;
                     align-items: center;
-                    font-size: 2.2rem; /* Larger font for initial */
+                    font-size: 2.2rem;
                     font-weight: bold;
-                    border: 2px solid #5a4434; /* Border around avatar */
+                    border: 2px solid var(--primary-brown); /* Consistent border */
                     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
                 }
+                /* Style for the clickable link area within the card */
+                .user-card-link {
+                    text-decoration: none; /* Remove underline */
+                    color: inherit; /* Inherit text color */
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    width: 100%; /* Make the link take full width */
+                }
+                .user-card-link:hover .user-card-username {
+                    color: var(--primary-brown); /* Change color on hover */
+                }
+                .user-card-username {
+                    transition: color 0.2s ease-in-out;
+                }
+
 
                 /* User List Grid */
                 .user-list-grid {
                     display: grid;
-                    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); /* Slightly wider cards */
+                    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
                     gap: 1.5rem;
                 }
 
-                /* Custom Button Styles (consistent with Dashboard) */
+                /* Custom Button Styles (consistent with Dashboard and Profile) */
                 .custom-button {
-                    background-color: #5a4434;
-                    border-color: #5a4434;
+                    background-color: var(--primary-brown);
+                    border-color: var(--primary-brown);
                     color: white;
-                    border-radius: 0.5rem; /* More rounded buttons */
-                    padding: 0.6rem 1.2rem; /* Slightly larger padding */
+                    border-radius: 0.5rem;
+                    padding: 0.6rem 1.2rem;
                     font-weight: 600;
                     transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, transform 0.1s ease-in-out;
                 }
                 .custom-button:hover {
-                    background-color: #7b6a5a;
-                    border-color: #7b6a5a;
-                    transform: translateY(-2px); /* More lift on hover */
+                    background-color: var(--secondary-brown);
+                    border-color: var(--secondary-brown);
+                    transform: translateY(-2px);
                     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
                 }
                 .custom-button:active {
@@ -520,14 +579,14 @@ const UsersPage = () => {
                     border-radius: 0.375rem;
                 }
 
-                /* Outline Buttons */
+                /* Outline Buttons (consistent with Dashboard and Profile) */
                 .btn-outline-primary {
-                    color: #5a4434;
-                    border-color: #5a4434;
+                    color: var(--primary-brown);
+                    border-color: var(--primary-brown);
                     background-color: transparent;
                 }
                 .btn-outline-primary:hover {
-                    background-color: #5a4434;
+                    background-color: var(--primary-brown);
                     color: white;
                 }
                 .btn-outline-info {
@@ -540,22 +599,22 @@ const UsersPage = () => {
                     color: white;
                 }
                 .btn-outline-secondary {
-                    color: #6c757d; /* Bootstrap secondary color */
-                    border-color: #6c757d;
+                    color: var(--text-medium); /* Use a text color for secondary */
+                    border-color: var(--border-color);
                     background-color: transparent;
                 }
                 .btn-outline-secondary:hover {
-                    background-color: #6c757d;
-                    color: white;
+                    background-color: var(--border-color);
+                    color: var(--text-dark);
                 }
 
-                /* Tab Styles (consistent with Dashboard but slightly adjusted for UsersPage) */
+                /* Tab Styles (consistent with Dashboard) */
                 .custom-tabs-users .nav-link {
-                    background-color: #e0d9c8;
-                    color: #5a4434;
-                    border: 1px solid #c8c0b2;
-                    border-bottom: none; /* Remove default bottom border */
-                    margin-bottom: -1px; /* Align perfectly with content */
+                    background-color: var(--border-color); /* Light background for tabs */
+                    color: var(--primary-brown);
+                    border: 1px solid var(--border-color);
+                    border-bottom: none;
+                    margin-bottom: -1px;
                     border-top-left-radius: 0.5rem;
                     border-top-right-radius: 0.5rem;
                     font-weight: bold;
@@ -564,20 +623,20 @@ const UsersPage = () => {
                 }
 
                 .custom-tabs-users .nav-link.active {
-                    background-color: #5a4434; /* Darker brown for active tab */
+                    background-color: var(--primary-brown); /* Darker brown for active tab */
                     color: white;
-                    border-color: #5a4434;
+                    border-color: var(--primary-brown);
                 }
 
                 .custom-tabs-users .nav-link:hover:not(.active) {
-                    background-color: #d4c7b8; /* Slightly darker on hover for inactive */
-                    color: #4a382e;
+                    background-color: var(--light-brown-100); /* Slightly darker on hover for inactive */
+                    color: var(--text-dark);
                 }
 
                 .custom-tabs-users .tab-content {
-                    background-color: #ffffff; /* Content area background */
-                    border: 1px solid #d4c7b8;
-                    border-top-left-radius: 0; /* Align with active tab */
+                    background-color: #ffffff;
+                    border: 1px solid var(--border-color);
+                    border-top-left-radius: 0;
                     border-top-right-radius: 0;
                     border-bottom-left-radius: 0.5rem;
                     border-bottom-right-radius: 0.5rem;
@@ -585,24 +644,71 @@ const UsersPage = () => {
                     padding: 1.5rem;
                 }
 
-                /* Search Input Styling */
-                .input-group .form-control {
-                    border-color: #d4c7b8;
-                    border-radius: 0.375rem;
+                /* Search Input Styling (consistent with Login/Register) */
+                .form-control-minimal { /* Re-using the class from Login/Register */
+                    border: 1px solid #e0e0e0;
+                    border-radius: 6px;
+                    padding: 0.6rem 0.8rem;
+                    font-size: 0.95rem;
+                    color: #444444;
+                    transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
                 }
-                .input-group .btn-outline-secondary {
-                    border-color: #d4c7b8;
-                    color: #5a4434;
+                .form-control-minimal:focus {
+                    border-color: var(--primary-brown);
+                    box-shadow: 0 0 0 2px rgba(90, 68, 52, 0.1);
+                    outline: none;
+                }
+                .input-group .btn-outline-secondary { /* For the clear button in SearchInput */
+                    border-color: var(--border-color);
+                    color: var(--primary-brown);
                 }
                 .input-group .btn-outline-secondary:hover {
-                    background-color: #d4c7b8;
-                    color: #4a382e;
+                    background-color: var(--light-brown-100);
+                    color: var(--text-dark);
                 }
+
+                /* Minimalist Alert Styles (copied from Dashboard/Login/Profile) */
+                .alert-minimal {
+                    background-color: #f0f8ff; /* Light blue for info */
+                    border-color: #d0e8ff;
+                    color: #31708f;
+                    font-size: 1rem;
+                    padding: 1rem 1.5rem;
+                    border-radius: 8px;
+                    text-align: center;
+                }
+                .alert-minimal.alert-danger {
+                    background-color: #ffe0e0;
+                    border-color: #ffc0c0;
+                    color: #a94442;
+                }
+                .alert-minimal.alert-warning {
+                    background-color: #fff8e1;
+                    border-color: #ffe0b2;
+                    color: #8a6d3b;
+                }
+
+                /* Minimalist Spinner/Loading Styles (copied from Dashboard/Profile) */
+                .spinner-minimal {
+                    color: var(--primary-brown) !important;
+                }
+                .loading-text {
+                    color: #777777;
+                    margin-top: 1rem;
+                }
+
 
                 /* Responsive adjustments */
                 @media (max-width: 768px) {
+                    .profile-container {
+                        padding: 1.5rem !important;
+                        margin: 1rem auto !important;
+                    }
+                    .profile-title {
+                        font-size: 2.5rem !important;
+                    }
                     .user-list-grid {
-                        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); /* Smaller cards on mobile */
+                        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
                         gap: 1rem;
                     }
                     .user-card {

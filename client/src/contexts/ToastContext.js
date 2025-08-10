@@ -1,53 +1,43 @@
 // src/contexts/ToastContext.js
-import React, { createContext, useCallback, useContext, useState } from 'react';
+import React, { createContext, useContext, useRef, useState } from 'react';
 
-const ToastContext = createContext(null);
+const ToastContext = createContext();
 
-export const ToastProvider = ({ children }) => {
+export function useToast() {
+    // Added for debugging: Check if useToast is being called
+    console.log("DEBUG: useToast hook is being called.");
+    return useContext(ToastContext);
+}
+
+export function ToastProvider({ children }) {
     const [toasts, setToasts] = useState([]);
-    const MAX_TOASTS = 3; // Maximum number of toasts to show at once
-    const TOAST_TIMEOUT = 5000; // Toast display duration in milliseconds
+    // eslint-disable-next-line no-unused-vars
+    const toastIdCounter = useRef(0); // Suppressed warning: toastIdCounter.current is used
 
-    const showToast = useCallback((message, type = 'info', title = 'Notification') => {
-        const id = Date.now(); // Unique ID for each toast instance
-        const newToast = { id, message, type, title };
+    const showToast = (message, variant = 'info', title = 'Notification', duration = 3000) => {
+        const id = toastIdCounter.current++; // Increment and use the current value
+        setToasts(prevToasts => [...prevToasts, { id, message, variant, title, duration }]); // Add duration to toast object
 
-        setToasts(prevToasts => {
-            // If maximum toasts are reached, remove the oldest one before adding the new one
-            if (prevToasts.length >= MAX_TOASTS) {
-                return [...prevToasts.slice(1), newToast];
-            }
-            return [...prevToasts, newToast];
-        });
+        // The timeout logic is now handled by the ToastNotification component's `autohide` and `delay` props
+        // We will remove toasts when the `onClose` is triggered from the ToastNotification component.
+    };
 
-        // Automatically remove the toast after a set timeout
-        setTimeout(() => {
-            removeToast(id);
-        }, TOAST_TIMEOUT);
-    }, []); // useCallback ensures this function is memoized
-
-    const removeToast = useCallback((id) => {
+    // New function to remove a toast by its ID
+    const removeToast = (id) => {
         setToasts(prevToasts => prevToasts.filter(toast => toast.id !== id));
-    }, []); // useCallback ensures this function is memoized
+    };
 
-    // The context value provided to consumers
-    const contextValue = {
-        toasts,
+    const value = {
         showToast,
-        removeToast,
+        toasts, // Expose toasts state
+        removeToast // Expose removeToast function
     };
 
     return (
-        <ToastContext.Provider value={contextValue}>
+        <ToastContext.Provider value={value}>
             {children}
+            {/* The ToastContainer and individual Toasts will now be rendered by ToastNotification.jsx */}
+            {/* Remove the ToastContainer from here as it's redundant with ToastNotification.jsx */}
         </ToastContext.Provider>
     );
-};
-
-export const useToast = () => {
-    const context = useContext(ToastContext);
-    if (context === undefined) {
-        throw new Error('useToast must be used within a ToastProvider');
-    }
-    return context;
-};
+}

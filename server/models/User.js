@@ -1,30 +1,32 @@
 // server/models/User.js
 const mongoose = require('mongoose');
 
-// Define the User Schema
 const UserSchema = new mongoose.Schema({
     username: {
         type: String,
         required: true,
         unique: true,
-        trim: true
+        trim: true,
+        minlength: 3
     },
     email: {
         type: String,
         required: true,
         unique: true,
         trim: true,
-        lowercase: true
-    },
-    phoneNumber: { // NEW: Phone number field
-        type: String,
-        unique: true, // Phone numbers should also be unique if provided
-        sparse: true, // Allows null values, so users don't have to provide a phone number
-        trim: true
+        lowercase: true,
+        match: [/.+@.+\..+/, 'Please fill a valid email address']
     },
     password: {
         type: String,
-        required: true
+        required: true,
+        minlength: 6 // Enforce minimum password length
+    },
+    phoneNumber: {
+        type: String,
+        required: false, // Optional field
+        trim: true,
+        // You might want to add a regex for phone number validation here
     },
     date: {
         type: Date,
@@ -32,25 +34,17 @@ const UserSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['user', 'admin'],
+        enum: ['user', 'admin'], // Define allowed roles
         default: 'user'
     },
-    // --- NEW: Fields for Password Reset ---
-    resetPasswordToken: {
-        type: String,
-        required: false // Not required for normal user creation
-    },
-    resetPasswordExpires: {
-        type: Date,
-        required: false // Not required for normal user creation
-    },
-    followers: [
+    // Social features:
+    following: [
         {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'User'
+            ref: 'User' // References the User model itself
         }
     ],
-    following: [
+    followers: [
         {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User'
@@ -61,8 +55,32 @@ const UserSchema = new mongoose.Schema({
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User'
         }
-    ]
+    ],
+    // NEW PROFILE FIELDS:
+    profileImage: { // Stores the URL/path to the profile image
+        type: String,
+        default: null // Default to null if no image is set
+    },
+    bio: {
+        type: String,
+        maxlength: 500, // Max length for bio
+        default: ''
+    },
+    socialLinks: { // Object to store various social media URLs
+        goodreads: {
+            type: String,
+            default: ''
+        },
+        twitter: {
+            type: String,
+            default: ''
+        },
+        instagram: {
+            type: String,
+            default: ''
+        }
+        // Add more social links as needed
+    }
 });
 
-// Export the User model based on the schema
 module.exports = mongoose.model('User', UserSchema);

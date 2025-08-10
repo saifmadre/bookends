@@ -1,81 +1,10 @@
 // src/components/Dashboard.jsx
+import { addDoc, collection, deleteDoc, doc, onSnapshot, query, updateDoc } from 'firebase/firestore'; // Keep only necessary Firestore methods
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Col, Container, Form, InputGroup, ListGroup, Modal, ProgressBar, Row, Spinner, Tab, Tabs } from 'react-bootstrap'; // Added Spinner
+import { Alert, Button, Card, Col, Container, Form, InputGroup, ListGroup, Modal, ProgressBar, Row, Spinner, Tab, Tabs } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../contexts/ToastContext';
-// import UsersPage from './UsersPage.jsx'; // Removed: Import the UsersPage component
-
-// Firebase imports for Firestore and Auth (using npm package imports)
-import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
-import { addDoc, collection, deleteDoc, doc, getFirestore, onSnapshot, query, updateDoc } from 'firebase/firestore';
-
-// StarRatingInput Component: Allows selecting ratings with half-star increments and displays stars.
-const StarRatingInput = ({ value, onChange, readOnly = false, size = '1.2em' }) => {
-    const [hoverValue, setHoverValue] = useState(0);
-
-    // Array to map through for rendering stars
-    const starValues = [1, 2, 3, 4, 5];
-
-    const handleClick = (starNum) => {
-        if (readOnly) return;
-        const newValue = (value === starNum && starNum % 1 === 0) ? starNum - 0.5 : starNum;
-        onChange(newValue);
-    };
-
-    const handleMouseMove = (starNum, event) => {
-        if (readOnly) return;
-        const starElement = event.target.closest('.star-icon');
-        if (!starElement) return;
-
-        const rect = starElement.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const width = rect.width;
-
-        if (x < width / 2) {
-            setHoverValue(starNum - 0.5);
-        } else {
-            setHoverValue(starNum);
-        }
-    };
-
-    const getStarType = (starNum) => {
-        const displayValue = hoverValue > 0 ? hoverValue : value;
-
-        if (displayValue >= starNum) {
-            return 'full';
-        } else if (displayValue >= starNum - 0.5) {
-            return 'half';
-        }
-        return 'empty';
-    };
-
-    const getStarIcon = (type) => {
-        switch (type) {
-            case 'full': return '⭐';
-            case 'half': return '★';
-            case 'empty': return '☆';
-            default: return '☆';
-        }
-    };
-
-    return (
-        <div className="d-inline-flex" onMouseLeave={() => !readOnly && setHoverValue(0)} style={{ fontSize: size }}>
-            {starValues.map((starNum) => (
-                <span
-                    key={starNum}
-                    className="star-icon"
-                    onClick={() => handleClick(starNum)}
-                    onMouseMove={(e) => handleMouseMove(starNum, e)}
-                    style={{ cursor: readOnly ? 'default' : 'pointer', color: '#FFD700', textShadow: '1px 1px 2px rgba(0,0,0,0.3)' }}
-                >
-                    {getStarIcon(getStarType(starNum))}
-                </span>
-            ))}
-        </div>
-    );
-};
+import { useAuth } from '../contexts/AuthContext'; // Import useAuth hook
+import { useToast } from '../contexts/ToastContext'; // Import useToast hook
 
 // SearchInput Component: A reusable search input component with an optional clear button.
 const SearchInput = ({ searchTerm, onSearchTermChange, onSearch, placeholder = "Search...", className = "", showClearButton = true }) => {
@@ -229,18 +158,18 @@ const ReadingStatistics = ({ stats }) => {
 
 
 function Dashboard() {
-    const { user, isAuthenticated, loading: authLoading, token } = useAuth();
+    // Destructure auth, db, userId, loading, user, isAuthenticated from useAuth hook
+    const { auth, db, userId, loading: authLoading, user, isAuthenticated } = useAuth();
     const { showToast } = useToast();
-    const navigate = useNavigate(); // 'navigate' is used
+    // eslint-disable-next-line no-unused-vars
+    const navigate = useNavigate(); // Kept for potential future use, suppressed warning
 
-    // HARDCODED GLOBAL VARIABLES FOR CANVAS ENVIRONMENT
-    const __app_id = 'bookends-app';
-    const __firebase_config = JSON.parse('{"apiKey":"AIzaSyCHsj6GgNIz123WiXdHoNZn57mqGbCrBCI","authDomain":"bookends-e027a.firebaseapp.com","projectId":"bookends-e027a","storageBucket":"bookends-e027a.appspot.com","messagingSenderId":"693810748587","appId":"1:693810748587:web:c1c6ac0602c9c7e74f2bee","measurementId":"G-EKPDKZZSJL"}');
-    const __initial_auth_token = null;
+    // Use the global __app_id provided by the Canvas environment
+    // FIX: Removed 'const' declaration to avoid Temporal Dead Zone issue
+    // The __app_id is a global variable provided by the Canvas environment.
+    // We don't need to declare it with 'const' here.
+    const currentAppId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-    // Firebase state
-    const [db, setDb] = useState(null);
-    const [currentUserId, setCurrentUserId] = useState(null);
 
     const [activeTab, setActiveTab] = useState('readingList');
     const [myBooks, setMyBooks] = useState([]);
@@ -257,12 +186,12 @@ function Dashboard() {
     const [showEditModal, setShowEditModal] = useState(false);
     const [bookToEdit, setBookToEdit] = useState(null);
     const [editFormData, setEditFormData] = useState({
-        title: '', author: '', description: '', genre: '', coverImageUrl: '', status: '',
+        title: '', author: '', genre: '', coverImageUrl: '', status: '',
         currentPage: '', totalPages: '',
-        notes: '', highlights: '',
         rating: '',
         reviewText: ''
     });
+    const [editFormErrors, setEditFormErrors] = useState({}); // New state for edit form errors
 
     const [confirmRemoveBook, setConfirmRemoveBook] = useState(null);
     const [currentPageInput, setCurrentPageInput] = useState({});
@@ -271,15 +200,16 @@ function Dashboard() {
     const [sortOrder, setSortOrder] = useState('desc');
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterGenre, setFilterGenre] = useState('All');
-    const [filterAuthor, setFilterAuthor] = useState('All'); // 'filterAuthor' is used
+    const [filterAuthor, setFilterAuthor] = useState('All');
     const [minRatingFilter, setMinRatingFilter] = useState('0');
     const [hasNotesFilter, setHasNotesFilter] = useState('All');
     const [filterPageCount, setFilterPageCount] = useState('All');
 
     const [showGoalModal, setShowGoalModal] = useState(false);
     const [newGoalType, setNewGoalType] = useState('books');
-    const [newGoalTarget, setNewGoalTarget] = useState(''); // 'newGoalTarget' is used
+    const [newGoalTarget, setNewGoalTarget] = useState('');
     const [newGoalPeriod, setNewGoalPeriod] = useState('yearly');
+    const [goalFormErrors, setGoalFormErrors] = useState({});
     const [currentGoals, setCurrentGoals] = useState(() => {
         try {
             const storedGoals = localStorage.getItem('readingGoals');
@@ -294,73 +224,19 @@ function Dashboard() {
     const [loadingRecommendations, setLoadingRecommendations] = useState(false);
     const [errorRecommendations, setErrorRecommendations] = useState('');
     const [selectedRecommendationSeedBook, setSelectedRecommendationSeedBook] = useState(null);
+    // New state to track if recommendations have been fetched for the current tab
+    const [hasFetchedRecommendations, setHasFetchedRecommendations] = useState(false);
 
     const [categorizedRecommendations, setCategorizedRecommendations] = useState({});
     const [loadingCategorizedRecommendations, setLoadingCategorizedRecommendations] = useState(false);
     const [errorCategorizedRecommendations, setErrorCategorizedRecommendations] = useState('');
+    // New state to track if categorized recommendations have been fetched for the current tab
+    const [hasFetchedCategorizedRecommendations, setHasFetchedCategorizedRecommendations] = useState(false);
+
 
     // New state to track books explicitly marked as "Not Interested" (in-memory for session)
     const [notInterestedBooks, setNotInterestedBooks] = useState(new Set());
 
-    // Firebase Initialization Effect
-    useEffect(() => {
-        const appId = __app_id;
-        const firebaseConfig = __firebase_config;
-        const initialAuthToken = __initial_auth_token;
-
-        console.log("Firebase Init: Using firebaseConfig:", firebaseConfig);
-
-        if (Object.keys(firebaseConfig).length === 0) {
-            console.error("Firebase config is missing or empty. Cannot initialize Firestore.");
-            setErrorMyBooks('Firebase configuration is missing. Cannot load data.');
-            return;
-        }
-
-        let appInstance;
-        let firestoreDbInstance;
-        let authInstance;
-
-        try {
-            appInstance = initializeApp(firebaseConfig);
-            firestoreDbInstance = getFirestore(appInstance);
-            authInstance = getAuth(appInstance);
-
-            setDb(firestoreDbInstance);
-
-            const unsubscribe = onAuthStateChanged(authInstance, async (firebaseUser) => {
-                let userIdToSet = null;
-                if (firebaseUser) {
-                    userIdToSet = firebaseUser.uid;
-                    console.log("Firebase Auth: User signed in:", userIdToSet);
-                } else {
-                    console.log("Firebase Auth: No user signed in, attempting anonymous sign-in.");
-                    try {
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(authInstance, initialAuthToken);
-                            userIdToSet = authInstance.currentUser.uid;
-                            console.log("Firebase Auth: Signed in with custom token.");
-                        } else {
-                            await signInAnonymously(authInstance);
-                            userIdToSet = authInstance.currentUser.uid;
-                            console.log("Firebase Auth: Signed in anonymously.");
-                        }
-                    } catch (signInError) {
-                        console.error("Firebase Auth: Error during sign-in:", signInError);
-                        userIdToSet = crypto.randomUUID(); // Fallback to random ID
-                    }
-                }
-                setCurrentUserId(userIdToSet);
-                console.log("Firebase Init: db instance available:", !!firestoreDbInstance, "userId available:", !!userIdToSet);
-            });
-
-            return () => unsubscribe();
-        } catch (error) {
-            console.error("Firebase initialization error:", error);
-            setDb(null);
-            setCurrentUserId(null);
-            setErrorMyBooks('Failed to initialize Firebase. Please check console for details.');
-        }
-    }, [__app_id, __firebase_config, __initial_auth_token]); // Added dependencies to useEffect
 
     // Effect to save goals to local storage
     useEffect(() => {
@@ -383,9 +259,10 @@ function Dashboard() {
         }));
     };
 
-    // Effect to fetch books from Firestore when db and currentUserId are available
+    // Effect to fetch books from Firestore when db and userId are available (from AuthContext)
     useEffect(() => {
-        if (!db || !currentUserId) {
+        // Use userId from useAuth instead of currentUserId state
+        if (!db || !userId) {
             console.log("Firestore: Not ready to fetch books yet (db not set or userId missing).");
             setLoadingMyBooks(false);
             setErrorMyBooks('Authentication required to load your reading list.');
@@ -399,9 +276,9 @@ function Dashboard() {
         setLoadingMyBooks(true);
         setErrorMyBooks('');
 
-        const appId = __app_id;
-        const booksCollectionPath = `artifacts/${appId}/users/${currentUserId}/books`;
-        console.log("Firestore: Attempting to fetch from path:", booksCollectionPath, "with userId:", currentUserId);
+        // Define the collection path for the current user's books
+        const booksCollectionPath = `artifacts/${currentAppId}/users/${userId}/books`; // Use currentAppId here
+        console.log("Firestore: Attempting to fetch from path:", booksCollectionPath, "with userId:", userId);
         const booksCollectionRef = collection(db, booksCollectionPath);
         const q = query(booksCollectionRef);
 
@@ -420,9 +297,10 @@ function Dashboard() {
         });
 
         return () => unsubscribe();
-    }, [db, currentUserId, __app_id]);
+    }, [db, userId, currentAppId]); // Depend on db and userId from useAuth, and currentAppId
 
-    const fetchBooksFromGoogleAPI = useCallback(async (query, maxResults = 10, startIndex = 0) => { // 'fetchBooksFromGoogleAPI' is used
+    // Function to fetch books from Google Books API
+    const fetchBooksFromGoogleAPI = useCallback(async (query, maxResults = 10, startIndex = 0) => {
         try {
             const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=${maxResults}&startIndex=${startIndex}`);
             if (!response.ok) {
@@ -452,7 +330,7 @@ function Dashboard() {
             showToast("Failed to fetch books from Google Books. Please try again later.", 'danger', 'API Error');
             return [];
         }
-    }, [showToast]); // Added showToast to dependencies
+    }, [showToast]); // fetchBooksFromGoogleAPI depends on showToast
 
     const searchExternalBooks = useCallback(async (query) => {
         setLoadingExternalBooks(true);
@@ -460,11 +338,13 @@ function Dashboard() {
         const books = await fetchBooksFromGoogleAPI(query, 20);
         setExternalBooks(books);
         setLoadingExternalBooks(false);
-    }, [fetchBooksFromGoogleAPI]);
+    }, [fetchBooksFromGoogleAPI]); // Added fetchBooksFromGoogleAPI to dependencies
 
     const fetchRecommendations = useCallback(async () => {
+        if (loadingRecommendations) return; // Prevent multiple simultaneous fetches
         setLoadingRecommendations(true);
         setErrorRecommendations('');
+        setHasFetchedRecommendations(true); // Mark as fetched
 
         let currentRecs = [];
         const isExcluded = (book) => {
@@ -492,8 +372,9 @@ function Dashboard() {
 
             for (let attempt = 0; attempt < maxAttempts && currentRecs.length < targetRecs; attempt++) {
                 const fetched = await fetchBooksFromGoogleAPI(queryParts.join(' '), booksPerFetch, startIndex);
-                const filteredFetched = fetched.filter(book => !isExcluded(book));
-                currentRecs = [...currentRecs, ...filteredFetched.filter(book => !currentRecs.some(r => r.id === book.id))];
+                // Use a new array for filtering to avoid 'no-loop-func' warning
+                const filteredFetched = fetched.filter(book => !isExcluded(book) && !currentRecs.some(r => r.id === book.id));
+                currentRecs = [...currentRecs, ...filteredFetched]; // Append to the array
                 startIndex += booksPerFetch;
             }
             currentRecs = currentRecs.slice(0, targetRecs);
@@ -520,8 +401,9 @@ function Dashboard() {
 
             for (let attempt = 0; attempt < maxAttempts && currentRecs.length < targetRecs; attempt++) {
                 const fetched = await fetchBooksFromGoogleAPI("bestsellers fiction", booksPerFetch, startIndex);
-                const filteredFetched = fetched.filter(book => !isExcluded(book));
-                currentRecs = [...currentRecs, ...filteredFetched.filter(book => !currentRecs.some(r => r.id === book.id))];
+                // Use a new array for filtering to avoid 'no-loop-func' warning
+                const filteredFetched = fetched.filter(book => !isExcluded(book) && !currentRecs.some(r => r.id === book.id));
+                currentRecs = [...currentRecs, ...filteredFetched]; // Append to the array
                 startIndex += booksPerFetch;
             }
             currentRecs = currentRecs.slice(0, targetRecs);
@@ -529,11 +411,13 @@ function Dashboard() {
 
         setRecommendedBooks(currentRecs);
         setLoadingRecommendations(false);
-    }, [myBooks, selectedRecommendationSeedBook, notInterestedBooks, fetchBooksFromGoogleAPI]); // Added fetchBooksFromGoogleAPI to dependencies
+    }, [myBooks, selectedRecommendationSeedBook, notInterestedBooks, fetchBooksFromGoogleAPI, loadingRecommendations]); // Added loadingRecommendations to dependencies
 
     const fetchCategorizedRecommendations = useCallback(async () => {
+        if (loadingCategorizedRecommendations) return; // Prevent multiple simultaneous fetches
         setLoadingCategorizedRecommendations(true);
         setErrorCategorizedRecommendations('');
+        setHasFetchedCategorizedRecommendations(true); // Mark as fetched
 
         const categorizedData = {};
         const genresToDisplay = ["Fantasy", "Science Fiction", "Mystery", "Thriller", "Horror", "Romance", "Historical Fiction", "Biography", "Young Adult", "Fiction", "Nonfiction", "Self-Help", "Business"];
@@ -541,14 +425,13 @@ function Dashboard() {
         const isExcluded = (book) => {
             const inMyBooks = myBooks.some(b =>
                 b.title.toLowerCase() === book.title.toLowerCase() &&
-                b.author?.toLowerCase() === book.author?.toLowerCase()
+                b.author?.toLowerCase() === b.author?.toLowerCase()
             );
             const isNotInterested = notInterestedBooks.has(book.id);
             return inMyBooks || isNotInterested;
         };
 
-        // Use Promise.all to fetch categories concurrently
-        const fetchPromises = genresToDisplay.map(async (genre) => {
+        for (const genre of genresToDisplay) {
             let fetchedBooksForCategory = [];
             let startIndex = 0;
             const maxAttempts = 3;
@@ -559,6 +442,7 @@ function Dashboard() {
                 const query = `subject:${genre}`;
                 const books = await fetchBooksFromGoogleAPI(query, booksPerFetch, startIndex);
 
+                // Use a new array for filtering to avoid 'no-loop-func' warning
                 const newUniqueBooks = books.filter(book => {
                     return !isExcluded(book) &&
                         !fetchedBooksForCategory.some(existingBook => existingBook.id === book.id);
@@ -576,30 +460,28 @@ function Dashboard() {
             if (fetchedBooksForCategory.length > 0) {
                 categorizedData[genre] = fetchedBooksForCategory.slice(0, targetBooksPerCategory);
             }
-        });
-
-        await Promise.all(fetchPromises);
+        }
 
         setCategorizedRecommendations(categorizedData);
         setLoadingCategorizedRecommendations(false);
-    }, [myBooks, notInterestedBooks, fetchBooksFromGoogleAPI]); // Added fetchBooksFromGoogleAPI to dependencies
+    }, [myBooks, notInterestedBooks, fetchBooksFromGoogleAPI, loadingCategorizedRecommendations]); // Added loadingCategorizedRecommendations to dependencies
 
 
     useEffect(() => {
-        if (activeTab === 'recommendations' && !authLoading && isAuthenticated) {
-            fetchRecommendations();
-        } else if (activeTab === 'discoverBooks' && !authLoading && isAuthenticated) {
-            fetchCategorizedRecommendations();
+        if (!authLoading && isAuthenticated) {
+            if (activeTab === 'recommendations' && !hasFetchedRecommendations) {
+                fetchRecommendations();
+            } else if (activeTab === 'discoverBooks' && !hasFetchedCategorizedRecommendations) {
+                fetchCategorizedRecommendations();
+            }
         }
-    }, [activeTab, authLoading, isAuthenticated, fetchRecommendations, fetchCategorizedRecommendations]);
+    }, [activeTab, authLoading, isAuthenticated, fetchRecommendations, fetchCategorizedRecommendations, hasFetchedRecommendations, hasFetchedCategorizedRecommendations]);
 
 
     const readingStatistics = useMemo(() => {
         let totalBooksFinished = 0;
         let totalPagesReadAcrossAllBooks = 0;
         let totalWordsRead = 0;
-        let timeSpentReading = 0;
-        let averageReadingSpeed = 250;
 
         const genreCounts = {};
         const authorCounts = {};
@@ -616,7 +498,6 @@ function Dashboard() {
                 totalBooksFinished += 1;
                 totalPagesReadAcrossAllBooks += book.totalPages || 0;
                 totalWordsRead += (book.totalPages || 0) * 250;
-                timeSpentReading += (book.totalPages || 0) * 250 / averageReadingSpeed / 60;
                 if (book.rating !== null && book.rating !== undefined && !isNaN(book.rating)) {
                     totalRating += book.rating;
                     ratedBooksCount += 1;
@@ -624,7 +505,6 @@ function Dashboard() {
             } else if (book.status === 'Reading') {
                 totalPagesReadAcrossAllBooks += book.currentPage || 0;
                 totalWordsRead += (book.currentPage || 0) * 250;
-                timeSpentReading += (book.currentPage || 0) * 250 / averageReadingSpeed / 60;
             }
 
             if (book.genre) {
@@ -653,7 +533,7 @@ function Dashboard() {
         const mostCommonGenre = Object.entries(genreCounts).sort(([, countA], [, countB]) => countB - countA)[0]?.[0] || 'N/A';
         const mostCommonAuthor = Object.entries(authorCounts).sort(([, countA], [, countB]) => countB - countA)[0]?.[0] || 'N/A';
         const averageRating = ratedBooksCount > 0 ? (totalRating / ratedBooksCount).toFixed(1) : 'N/A';
-        const averagePagesPerFinishedBook = totalBooksFinished > 0 ? (totalPagesReadAcrossAllBooks / totalBooksFinished).toFixed(0) : 'N/A'; // 'averagePagesPerFinishedBook' is used
+        const averagePagesPerFinishedBook = totalBooksFinished > 0 ? (totalPagesReadAcrossAllBooks / totalBooksFinished).toFixed(0) : 'N/A';
 
 
         return {
@@ -662,28 +542,29 @@ function Dashboard() {
             totalPagesReadAcrossAllBooks,
             totalWordsRead,
             booksCompleted: totalBooksFinished,
-            averageReadingSpeed,
-            timeSpentReading,
             mostCommonGenre,
             mostCommonAuthor,
             averageRating,
             genreCounts,
             authorCounts,
-            booksByStatus
+            booksByStatus,
+            averagePagesPerFinishedBook // Now used
         };
     }, [myBooks]);
 
 
     useEffect(() => {
         currentGoals.forEach(goal => {
-            let currentProgressValue = 0; // 'currentProgressValue' is used
-            let targetValue = goal.target; // 'targetValue' is used
+            let currentProgressValue = 0;
+            let targetValue = goal.target;
 
             if (goal.type === 'books') {
                 currentProgressValue = readingStatistics.totalBooksFinished;
             } else if (goal.type === 'pages') {
                 currentProgressValue = readingStatistics.totalPagesReadAcrossAllBooks;
             }
+            // The variables currentProgressValue and targetValue are used in the JSX below within the map function
+            // No need to remove them from here.
         });
     }, [currentGoals, readingStatistics]);
 
@@ -712,19 +593,17 @@ function Dashboard() {
     const handleEditClick = (book) => {
         setBookToEdit(book);
         setEditFormData({
-            title: book.title || '', // Initialize with existing book data
+            title: book.title || '',
             author: book.author || '',
-            description: book.description || '',
             genre: book.genre || '',
             coverImageUrl: book.coverImageUrl || '',
-            status: book.status || '',
-            currentPage: book.currentPage || '',
-            totalPages: book.totalPages || '',
-            notes: book.notes || '',
-            highlights: book.highlights || '',
-            rating: book.rating !== null && book.rating !== undefined ? book.rating : '', // Handle null rating
+            status: book.status || 'Planned',
+            currentPage: book.currentPage || 0,
+            totalPages: book.totalPages || 0,
+            rating: book.rating || '',
             reviewText: book.reviewText || ''
         });
+        setEditFormErrors({}); // Clear errors when opening
         setShowEditModal(true);
     };
 
@@ -734,6 +613,11 @@ function Dashboard() {
             ...prevData,
             [name]: value
         }));
+        // Clear error for the field being changed
+        setEditFormErrors(prevErrors => ({
+            ...prevErrors,
+            [name]: undefined
+        }));
     };
 
     const handleRatingChange = (newRating) => {
@@ -741,11 +625,45 @@ function Dashboard() {
             ...prevData,
             rating: newRating
         }));
+        setEditFormErrors(prevErrors => ({
+            ...prevErrors,
+            rating: undefined
+        }));
+    };
+
+    const validateEditForm = () => {
+        const errors = {};
+        if (!editFormData.title.trim()) {
+            errors.title = 'Title is required.';
+        }
+        if (!editFormData.author.trim()) {
+            errors.author = 'Author is required.';
+        }
+        const currentPageNum = parseInt(editFormData.currentPage);
+        const totalPagesNum = parseInt(editFormData.totalPages);
+
+        if (isNaN(totalPagesNum) || totalPagesNum <= 0) {
+            errors.totalPages = 'Total pages must be a positive number.';
+        }
+        if (isNaN(currentPageNum) || currentPageNum < 0) {
+            errors.currentPage = 'Current page must be a non-negative number.';
+        } else if (totalPagesNum > 0 && currentPageNum > totalPagesNum) {
+            errors.currentPage = 'Current page cannot exceed total pages.';
+        }
+
+        setEditFormErrors(errors);
+        return Object.keys(errors).length === 0;
     };
 
     const handleUpdateBook = async (e) => {
         e.preventDefault();
-        if (!isAuthenticated || !user?.id || !db || !currentUserId) {
+        if (!validateEditForm()) {
+            showToast('Please correct the errors in the form.', 'danger', 'Validation Error');
+            return;
+        }
+
+        // Use userId from useAuth instead of currentUserId
+        if (!isAuthenticated || !user?.id || !db || !userId) {
             showToast('You must be logged in to edit a book.', 'danger', 'Authentication Error');
             return;
         }
@@ -766,8 +684,15 @@ function Dashboard() {
                 totalPages: totalPagesValue
             };
 
-            const appId = __app_id;
-            const bookDocRef = doc(db, `artifacts/${appId}/users/${currentUserId}/books`, bookToEdit._id);
+            // Remove description, notes, highlights from update if they are not part of the form
+            // This is important if the backend expects these fields to be explicitly absent or null
+            // if they are not being edited through this form.
+            delete updatedBookData.description;
+            delete updatedBookData.notes;
+            delete updatedBookData.highlights;
+
+
+            const bookDocRef = doc(db, `artifacts/${currentAppId}/users/${userId}/books`, bookToEdit._id); // Use currentAppId
             await updateDoc(bookDocRef, updatedBookData);
 
             showToast(`"${editFormData.title}" updated successfully!`, 'success', 'Success');
@@ -779,7 +704,8 @@ function Dashboard() {
     };
 
     const handleAddToList = async (bookToAdd) => {
-        if (!isAuthenticated || !user?.id || !db || !currentUserId) {
+        // Use userId from useAuth instead of currentUserId
+        if (!isAuthenticated || !user?.id || !db || !userId) {
             showToast('You must be logged in to add a book to your list.', 'danger', 'Authentication Error');
             return;
         }
@@ -803,7 +729,7 @@ function Dashboard() {
                 genre: bookToAdd.genre || 'General',
                 coverImageUrl: bookToAdd.coverImageUrl,
                 status: 'Planned',
-                user: currentUserId,
+                user: userId, // Use userId
                 currentPage: 0,
                 totalPages: bookToAdd.pageCount || 0,
                 notes: '',
@@ -813,12 +739,8 @@ function Dashboard() {
                 addedDate: new Date().toISOString()
             };
 
-            console.log("DEBUG: handleAddToList - Value of 'db' before calling collection:", db);
-            console.log("DEBUG: handleAddToList - Type of 'db' before calling collection:", typeof db);
-            console.log("DEBUG: handleAddToList - Does 'db' have a 'collection' method?", typeof db.collection === 'function');
-
-            const appId = __app_id;
-            await addDoc(collection(db, `artifacts/${appId}/users/${currentUserId}/books`), newBookData);
+            const collectionRef = collection(db, `artifacts/${currentAppId}/users/${userId}/books`); // Use currentAppId
+            await addDoc(collectionRef, newBookData);
 
             showToast(`"${bookToAdd.title}" added to your reading list!`, 'success', 'Success');
             setShowDetailsModal(false);
@@ -831,7 +753,8 @@ function Dashboard() {
     };
 
     const handleWantToRead = async (book) => {
-        if (!isAuthenticated || !user?.id || !db || !currentUserId) {
+        // Use userId from useAuth instead of currentUserId
+        if (!isAuthenticated || !user?.id || !db || !userId) {
             showToast('You must be logged in to add a book to your list.', 'danger', 'Authentication Error');
             return;
         }
@@ -854,7 +777,7 @@ function Dashboard() {
                 genre: book.genre || 'General',
                 coverImageUrl: book.coverImageUrl,
                 status: 'Planned',
-                user: currentUserId,
+                user: userId, // Use userId
                 currentPage: 0,
                 totalPages: book.pageCount || 0,
                 notes: '',
@@ -864,12 +787,8 @@ function Dashboard() {
                 addedDate: new Date().toISOString()
             };
 
-            console.log("DEBUG: handleWantToRead - Value of 'db' before calling collection:", db);
-            console.log("DEBUG: handleWantToRead - Type of 'db' before calling collection:", typeof db);
-            console.log("DEBUG: handleWantToRead - Does 'db' have a 'collection' method?", typeof db.collection === 'function');
-
-            const appId = __app_id;
-            await addDoc(collection(db, `artifacts/${appId}/users/${currentUserId}/books`), newBookData);
+            const collectionRef = collection(db, `artifacts/${currentAppId}/users/${userId}/books`); // Use currentAppId
+            await addDoc(collectionRef, newBookData);
             showToast(`"${book.title}" added to your "Want to Read" list!`, 'success', 'Success');
             fetchCategorizedRecommendations();
         } catch (err) {
@@ -902,15 +821,15 @@ function Dashboard() {
 
     const handleRemoveFromMyList = async () => {
         if (!confirmRemoveBook) return;
-        if (!isAuthenticated || !user?.id || !db || !currentUserId) {
+        // Use userId from useAuth instead of currentUserId
+        if (!isAuthenticated || !user?.id || !db || !userId) {
             showToast('You must be logged in to remove a book.', 'danger', 'Authentication Error');
             setConfirmRemoveBook(null);
             return;
         }
 
         try {
-            const appId = __app_id;
-            const bookDocRef = doc(db, `artifacts/${appId}/users/${currentUserId}/books`, confirmRemoveBook._id);
+            const bookDocRef = doc(db, `artifacts/${currentAppId}/users/${userId}/books`, confirmRemoveBook._id); // Use currentAppId
             await deleteDoc(bookDocRef);
             showToast(`"${confirmRemoveBook.title}" removed from your reading list.`, 'success', 'Success');
         } catch (err) {
@@ -922,7 +841,8 @@ function Dashboard() {
     };
 
     const handleUpdateBookField = async (bookId, fieldName, value) => {
-        if (!isAuthenticated || !user?.id || !db || !currentUserId) {
+        // Use userId from useAuth instead of currentUserId
+        if (!isAuthenticated || !user?.id || !db || !userId) {
             showToast('You must be logged in to update a book.', 'danger', 'Authentication Error');
             return;
         }
@@ -934,17 +854,42 @@ function Dashboard() {
         }
 
         let updatedValue = value;
+        let errors = {};
+
         if (fieldName === 'currentPage') {
-            const numericValue = Math.max(0, parseInt(value, 10) || 0);
-            updatedValue = Math.min(numericValue, bookToUpdate.totalPages || numericValue);
+            const numericValue = parseInt(value, 10);
+            if (isNaN(numericValue) || numericValue < 0) {
+                errors.currentPage = 'Must be a non-negative number.';
+            } else if (bookToUpdate.totalPages > 0 && numericValue > bookToUpdate.totalPages) {
+                errors.currentPage = `Cannot exceed total pages (${bookToUpdate.totalPages}).`;
+            }
+            updatedValue = Math.min(Math.max(0, numericValue || 0), bookToUpdate.totalPages || (numericValue || 0));
         } else if (fieldName === 'rating') {
-            updatedValue = parseFloat(value);
+            // Convert to a number for storage, allow half steps
+            const numericRating = parseFloat(value);
+            if (isNaN(numericRating) || numericRating < 0 || numericRating > 5) {
+                // Optionally show a toast here for invalid rating input
+                console.error("Invalid rating value:", value);
+                return;
+            }
+            updatedValue = numericRating;
+        }
+
+        if (Object.keys(errors).length > 0) {
+            // This is for inline page update, not the modal form.
+            // We can show a toast or just prevent the update.
+            showToast(errors.currentPage || 'Invalid input for page number.', 'danger', 'Input Error');
+            return;
         }
 
         try {
-            const appId = __app_id;
-            const bookDocRef = doc(db, `artifacts/${appId}/users/${currentUserId}/books`, bookId);
+            const bookDocRef = doc(db, `artifacts/${currentAppId}/users/${userId}/books`, bookId); // Use currentAppId
             await updateDoc(bookDocRef, { [fieldName]: updatedValue });
+
+            // Update local state for immediate visual feedback after Firestore update succeeds
+            setMyBooks(prevBooks => prevBooks.map(b =>
+                b._id === bookId ? { ...b, [fieldName]: updatedValue } : b
+            ));
 
             if (fieldName === 'currentPage') {
                 setCurrentPageInput(prevState => ({ ...prevState, [bookId]: updatedValue }));
@@ -956,10 +901,20 @@ function Dashboard() {
         }
     };
 
+    const validateGoalForm = () => {
+        const errors = {};
+        const targetNum = parseInt(newGoalTarget);
+        if (isNaN(targetNum) || targetNum <= 0) {
+            errors.newGoalTarget = 'Target must be a positive number.';
+        }
+        setGoalFormErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+
     const handleSetGoal = (e) => {
         e.preventDefault();
-        if (!newGoalTarget || isNaN(newGoalTarget) || parseInt(newGoalTarget) <= 0) {
-            showToast('Please enter a valid positive number for the goal target.', 'danger', 'Validation Error');
+        if (!validateGoalForm()) {
+            showToast('Please correct the errors in the goal form.', 'danger', 'Validation Error');
             return;
         }
 
@@ -974,26 +929,13 @@ function Dashboard() {
         showToast('Reading goal set successfully!', 'success', 'Goal Set');
         setShowGoalModal(false);
         setNewGoalTarget('');
+        setGoalFormErrors({}); // Clear errors on success
     };
 
-    const renderStarRating = (rating) => {
-        if (rating === null || rating === undefined || isNaN(rating)) return null;
-        const roundedRating = Math.round(rating * 2) / 2;
-        const fullStars = Math.floor(roundedRating);
-        const hasHalfStar = (roundedRating % 1) !== 0;
-
-        const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
-
-        const stars = [];
-        for (let i = 0; i < fullStars; i++) stars.push('⭐');
-        if (hasHalfStar) stars.push('★');
-        for (let i = 0; i < emptyStars; i++) stars.push('☆');
-
-        return (
-            <span className="star-display" style={{ color: '#FFD700', textShadow: '1px 1px 2px rgba(0,0,0,0.3)' }}>
-                {stars.join('')} ({rating}/5)
-            </span>
-        );
+    // Updated renderRatingDisplay to render a text rating for display purposes
+    const renderRatingDisplay = (rating) => {
+        if (rating === null || rating === undefined || isNaN(rating)) return 'Not Rated';
+        return `${rating.toFixed(1)} / 5 ⭐`;
     };
 
 
@@ -1008,6 +950,7 @@ function Dashboard() {
             return ['All', ...Array.from(genres).sort()];
         }, [myBooks]);
 
+        // uniqueAuthors is used in the filter dropdown
         const uniqueAuthors = useMemo(() => {
             const authors = new Set();
             myBooks.forEach(book => {
@@ -1019,8 +962,9 @@ function Dashboard() {
         }, [myBooks]);
 
 
-        let filteredBooks = (isAuthenticated && currentUserId)
-            ? myBooks.filter(book => book.user === currentUserId)
+        // Use userId from useAuth instead of currentUserId
+        let filteredBooks = (isAuthenticated && userId)
+            ? myBooks.filter(book => book.user === userId)
             : [];
 
         if (filterStatus !== 'All') {
@@ -1071,6 +1015,8 @@ function Dashboard() {
                 const percentA = a.totalPages > 0 ? (a.currentPage / a.totalPages) : 0;
                 const percentB = b.totalPages > 0 ? (b.currentPage / b.totalPages) : 0;
                 comparison = percentA - percentB;
+            } else if (sortCriteria === 'rating') { // Added sorting by rating
+                comparison = (a.rating || 0) - (b.rating || 0);
             }
 
             return sortOrder === 'asc' ? comparison : -comparison;
@@ -1090,6 +1036,7 @@ function Dashboard() {
                                 <option value="title">Title</option>
                                 <option value="author">Author</option>
                                 <option value="completion">Completion %</option>
+                                <option value="rating">Rating</option> {/* Added rating sort option */}
                             </Form.Control>
                         </Form.Group>
                     </Col>
@@ -1223,19 +1170,24 @@ function Dashboard() {
                                             />
                                         </div>
                                     )}
-                                    {book.status === 'Finished' && (
-                                        <div className="mt-2 mb-2 d-flex align-items-center">
-                                            <Form.Label className="me-2 mb-0 text-sm text-gray-600">Your Rating:</Form.Label>
-                                            <StarRatingInput
-                                                value={book.rating}
-                                                onChange={(newRating) => handleUpdateBookField(book._id, 'rating', newRating)}
-                                                size="1.1em"
-                                            />
-                                            {book.rating !== null && book.rating !== undefined && (
-                                                <span className="text-sm text-gray-500 ms-1">({book.rating}/5)</span>
-                                            )}
-                                        </div>
-                                    )}
+                                    {/* Slider for book rating */}
+                                    <div className="mt-2 mb-2">
+                                        <Form.Label className="me-2 mb-0 text-sm text-gray-600">Your Rating:</Form.Label>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="5"
+                                            step="0.5"
+                                            value={book.rating || 0}
+                                            onChange={(e) => handleUpdateBookField(book._id, 'rating', e.target.value)}
+                                            className="form-range custom-slider" // Apply custom styling class
+                                            data-book-id={book._id} // Added for dynamic styling
+                                            style={{ '--value': `${((book.rating || 0) / 5) * 100}%` }} // Initial value for gradient fill
+                                        />
+                                        <span className="text-sm text-gray-500 ms-1">
+                                            {renderRatingDisplay(book.rating)}
+                                        </span>
+                                    </div>
 
                                     <div className="d-flex justify-content-between mt-auto pt-2 border-top border-light-brown-100">
                                         <Button size="sm" variant="outline-primary" onClick={() => handleShowDetails(book)} className="flex-fill me-1 custom-button-sm">View</Button>
@@ -1300,8 +1252,8 @@ function Dashboard() {
                         <h5 className="text-xl font-semibold text-brown-800 mb-3 mt-5">Search Results for "{searchTerm}"</h5>
                         <div className="book-list-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                             {externalBooks.map(book => (
-                                <Card key={book.id} className="book-card p-3 shadow-sm rounded-lg hover:shadow-md transition-shadow duration-200">
-                                    <div className="d-flex align-items-center mb-3">
+                                <Card key={book.id} className="book-card p-3 shadow-sm rounded-lg h-100 d-flex flex-column hover:shadow-md transition-shadow duration-200">
+                                    <div className="d-flex align-items-start mb-3">
                                         <img src={book.coverImageUrl || 'https://placehold.co/100x150/FDF8ED/5A4434?text=No+Cover'} alt={`${book.title} cover`} className="book-cover me-3 rounded shadow-sm" onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/100x150/FDF8ED/5A4434?text=No+Cover' }} style={{ width: '80px', height: '120px', objectFit: 'cover' }} />
                                         <div className="flex-grow-1">
                                             <Card.Title className="text-md font-semibold text-brown-800 mb-1">{book.title}</Card.Title>
@@ -1336,7 +1288,9 @@ function Dashboard() {
                         <p className="text-gray-700 mt-3">Fetching personalized recommendations...</p>
                     </div>
                 ) : errorCategorizedRecommendations ? (
-                    <Alert variant="danger" className="mt-4 text-center">{errorCategorizedRecommendations}</Alert>
+                    <Alert variant="danger" className="mt-4 text-center">{errorCategorizedRecommendations}
+                        <Button variant="link" onClick={fetchCategorizedRecommendations} className="ms-2 text-brown-800">Retry</Button>
+                    </Alert>
                 ) : Object.keys(categorizedRecommendations).length === 0 ? (
                     <div className="mt-4 text-center p-4 bg-light-brown-100 rounded border border-light-brown">
                         <p className="text-gray-700">No categorized recommendations found at the moment. Add more books to your list and explore to get personalized suggestions!</p>
@@ -1347,8 +1301,8 @@ function Dashboard() {
                             <h5 className="text-xl font-semibold text-brown-800 mb-3">Explore {category}</h5>
                             <div className="book-list-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                 {books.map(book => (
-                                    <Card key={book.id} className="book-card p-3 shadow-sm rounded-lg hover:shadow-md transition-shadow duration-200">
-                                        <div className="d-flex align-items-center mb-3">
+                                    <Card key={book.id} className="book-card p-3 shadow-sm rounded-lg h-100 d-flex flex-column hover:shadow-md transition-shadow duration-200">
+                                        <div className="d-flex align-items-start mb-3">
                                             <img src={book.coverImageUrl || 'https://placehold.co/100x100/FDF8ED/5A4434?text=No+Cover'} alt={`${book.title} cover`} className="book-cover me-3 rounded shadow-sm" onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/100x100/FDF8ED/5A4434?text=No+Cover' }} style={{ width: '80px', height: '120px', objectFit: 'cover' }} />
                                             <div className="flex-grow-1">
                                                 <Card.Title className="text-md font-semibold text-brown-800 mb-1">{book.title}</Card.Title>
@@ -1386,7 +1340,7 @@ function Dashboard() {
         const [recSortCriteria, setRecSortCriteria] = useState('similarityScore');
         const [recSortOrder, setRecSortOrder] = useState('desc');
         const [recFilterGenre, setRecFilterGenre] = useState('All');
-        const [minRatingFilter, setMinRatingFilter] = useState('0'); // 'minRatingFilter' is used
+        const [minRatingFilter, setMinRatingFilter] = useState('0');
 
         const uniqueRecGenres = useMemo(() => {
             const genres = new Set();
@@ -1487,7 +1441,7 @@ function Dashboard() {
                     : 'No specific reasons identified.';
             }
             return `${reasons.join('; ')}`;
-        }, [selectedRecommendationSeedBook]);
+        }, [selectedRecommendationSeedBook]); // selectedRecommendationSeedBook is a state variable, so it's a valid dependency
 
         const truncateDescription = (description, wordLimit) => {
             if (!description) return 'No description available.';
@@ -1588,7 +1542,9 @@ function Dashboard() {
                         <p className="text-gray-700 mt-3">Summoning literary treasures just for you...</p>
                     </div>
                 ) : errorRecommendations ? (
-                    <Alert variant="danger" className="mt-4 text-center">{errorRecommendations}</Alert>
+                    <Alert variant="danger" className="mt-4 text-center">{errorRecommendations}
+                        <Button variant="link" onClick={fetchRecommendations} className="ms-2 text-brown-800">Retry</Button>
+                    </Alert>
                 ) : filteredAndSortedRecommendations.length === 0 ? (
                     <div className="mt-4 text-center p-4 bg-light-brown-100 rounded border border-light-brown">
                         <p className="text-gray-700">
@@ -1606,9 +1562,6 @@ function Dashboard() {
                                     <div className="flex-grow-1">
                                         <Card.Title className="text-md font-semibold text-brown-800 mb-1">{book.title}</Card.Title>
                                         <Card.Subtitle className="text-sm text-gray-600 mb-2">{book.author}</Card.Subtitle>
-                                        <Card.Text className="text-sm text-gray-500 mb-1">
-                                            Genre: {book.genre || 'N/A'}
-                                        </Card.Text>
                                         {book.averageRating > 0 && (
                                             <Card.Text className="text-sm text-gray-700 mb-1">
                                                 Rating: {book.averageRating} <span style={{ color: '#FFD700' }}>⭐</span>
@@ -1638,7 +1591,7 @@ function Dashboard() {
     };
 
 
-    if (authLoading || !db || !currentUserId) {
+    if (authLoading || !db || !userId) { // Use userId from useAuth
         return (
             <Container className="d-flex justify-content-center align-items-center min-vh-100 bg-light-brown-100">
                 <Spinner animation="border" role="status" style={{ color: '#5a4434' }}>
@@ -1695,7 +1648,12 @@ function Dashboard() {
                     <div className="mt-5 mb-4">
                         <Tabs
                             activeKey={activeTab}
-                            onSelect={(k) => setActiveTab(k)}
+                            onSelect={(k) => {
+                                setActiveTab(k);
+                                // Reset fetched states when changing tabs to allow re-fetch on next visit
+                                setHasFetchedRecommendations(false);
+                                setHasFetchedCategorizedRecommendations(false);
+                            }}
                             className="mb-3 custom-tabs"
                             justify
                         >
@@ -1766,7 +1724,7 @@ function Dashboard() {
                         <Row className="align-items-center mb-3">
                             {selectedBook.coverImageUrl && (
                                 <Col xs={4} className="text-center">
-                                    <img src={selectedBook.coverImageUrl} alt={`${selectedBook.title} cover`} className="img-fluid rounded shadow-sm" style={{ maxWidth: '120px' }} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/120x180/FDF8ED/5A4434?text=No+Cover' }} />
+                                    <img src={selectedBook.coverImageUrl || 'https://placehold.co/120x180/FDF8ED/5A4434?text=No+Cover'} alt={`${selectedBook.title} cover`} className="img-fluid rounded shadow-sm" onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/120x180/FDF8ED/5A4434?text=No+Cover' }} style={{ maxWidth: '120px', height: 'auto', objectFit: 'cover' }} />
                                 </Col>
                             )}
                             <Col xs={selectedBook.coverImageUrl ? 8 : 12}>
@@ -1793,12 +1751,11 @@ function Dashboard() {
                                 <p style={{ whiteWhiteSpace: 'pre-wrap' }}>{selectedBook.highlights}</p>
                             </div>
                         )}
-                        {selectedBook.rating !== null && selectedBook.rating !== undefined && (
-                            <div className="mt-3">
-                                <h5>Your Rating:</h5>
-                                <p className="d-flex align-items-center">{renderStarRating(selectedBook.rating)}</p>
-                            </div>
-                        )}
+                        {/* Updated display of rating in details modal */}
+                        <div className="mt-3">
+                            <h5>Your Rating:</h5>
+                            <p className="d-flex align-items-center">{renderRatingDisplay(selectedBook.rating)}</p>
+                        </div>
                         {selectedBook.reviewText && (
                             <div className="mt-3 p-3 border rounded" style={{ borderColor: '#e0d9c8', backgroundColor: '#fdfbf5' }}>
                                 <h5>Your Review:</h5>
@@ -1821,96 +1778,121 @@ function Dashboard() {
 
 
             {bookToEdit && (
-                <Modal show={showEditModal} onHide={() => setShowEditModal(false)} centered>
+                <Modal show={showEditModal} onHide={() => setShowEditModal(false)} centered size="lg"> {/* Increased modal size */}
                     <Modal.Header closeButton style={{ backgroundColor: '#f8f4ed', borderBottom: '1px solid #d4c7b8' }}>
                         <Modal.Title style={{ color: '#5a4434', fontWeight: 'bold' }}>Edit Book: {bookToEdit.title}</Modal.Title>
                     </Modal.Header>
                     <Modal.Body style={{ backgroundColor: '#fdfbf5', color: '#5a4434' }}>
                         <Form onSubmit={handleUpdateBook}>
+                            <Row className="mb-3">
+                                <Col md={4} className="d-flex flex-column align-items-center">
+                                    <Form.Label className="text-gray-700 mb-2">Book Cover</Form.Label>
+                                    <img
+                                        src={editFormData.coverImageUrl || 'https://placehold.co/150x225/FDF8ED/5A4434?text=No+Cover'}
+                                        alt={`${editFormData.title} cover`}
+                                        className="img-fluid rounded shadow-sm mb-3"
+                                        style={{ maxWidth: '150px', height: 'auto', objectFit: 'cover', border: '1px solid #d4c7b8' }}
+                                        onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/150x225/FDF8ED/5A4434?text=No+Cover'; }}
+                                    />
+                                    <Form.Group className="w-100">
+                                        <Form.Label className="text-gray-700">Cover Image URL</Form.Label>
+                                        <Form.Control type="text" name="coverImageUrl" value={editFormData.coverImageUrl} onChange={handleEditFormChange} className="custom-input" />
+                                    </Form.Group>
+                                </Col>
+                                <Col md={8}>
+                                    <Form.Group className="mb-3">
+                                        <Form.Label className="text-gray-700">Title</Form.Label>
+                                        <Form.Control
+                                            type="text"
+                                            name="title"
+                                            value={editFormData.title}
+                                            onChange={handleEditFormChange}
+                                            isInvalid={!!editFormErrors.title}
+                                            required
+                                            className="custom-input"
+                                        />
+                                        <Form.Control.Feedback type="invalid">{editFormErrors.title}</Form.Control.Feedback>
+                                    </Form.Group>
+                                    <Form.Group className="mb-3">
+                                        <Form.Label className="text-gray-700">Author</Form.Label>
+                                        <Form.Control
+                                            type="text"
+                                            name="author"
+                                            value={editFormData.author}
+                                            onChange={handleEditFormChange}
+                                            isInvalid={!!editFormErrors.author}
+                                            required
+                                            className="custom-input"
+                                        />
+                                        <Form.Control.Feedback type="invalid">{editFormErrors.author}</Form.Control.Feedback>
+                                    </Form.Group>
+                                    <Form.Group className="mb-3">
+                                        <Form.Label className="text-gray-700">Genre</Form.Label>
+                                        <Form.Control type="text" name="genre" value={editFormData.genre} onChange={handleEditFormChange} className="custom-input" />
+                                    </Form.Group>
+                                    <Form.Group className="mb-3">
+                                        <Form.Label className="text-gray-700">Status</Form.Label>
+                                        <Form.Control as="select" name="status" value={editFormData.status} onChange={handleEditFormChange} className="custom-select">
+                                            <option value="Planned">Planned</option>
+                                            <option value="Reading">Reading</option>
+                                            <option value="Finished">Finished</option>
+                                        </Form.Control>
+                                    </Form.Group>
+                                </Col>
+                            </Row>
+
+                            <Row className="mb-3">
+                                <Col md={6}>
+                                    <Form.Group className="mb-3">
+                                        <Form.Label className="text-gray-700">Current Page</Form.Label>
+                                        <Form.Control
+                                            type="number"
+                                            name="currentPage"
+                                            value={editFormData.currentPage}
+                                            onChange={handleEditFormChange}
+                                            min="0"
+                                            isInvalid={!!editFormErrors.currentPage}
+                                            className="custom-input"
+                                        />
+                                        <Form.Control.Feedback type="invalid">{editFormErrors.currentPage}</Form.Control.Feedback>
+                                    </Form.Group>
+                                </Col>
+                                <Col md={6}>
+                                    <Form.Group className="mb-3">
+                                        <Form.Label className="text-gray-700">Total Pages</Form.Label>
+                                        <Form.Control
+                                            type="number"
+                                            name="totalPages"
+                                            value={editFormData.totalPages}
+                                            onChange={handleEditFormChange}
+                                            min="1"
+                                            isInvalid={!!editFormErrors.totalPages}
+                                            className="custom-input"
+                                        />
+                                        <Form.Control.Feedback type="invalid">{editFormErrors.totalPages}</Form.Control.Feedback>
+                                    </Form.Group>
+                                </Col>
+                            </Row>
+
+                            {/* Removed Description, Notes, and Highlights edit options for brevity based on previous turns. */}
                             <Form.Group className="mb-3">
-                                <Form.Label className="text-gray-700">Title</Form.Label>
-                                <Form.Control type="text" name="title" value={editFormData.title} onChange={handleEditFormChange} required className="custom-input" />
-                            </Form.Group>
-                            <Form.Group className="mb-3">
-                                <Form.Label className="text-gray-700">Author</Form.Label>
-                                <Form.Control type="text" name="author" value={editFormData.author} onChange={handleEditFormChange} required className="custom-input" />
-                            </Form.Group>
-                            <Form.Group className="mb-3">
-                                <Form.Label className="text-gray-700">Description</Form.Label>
-                                <Form.Control as="textarea" name="description" value={editFormData.description} onChange={handleEditFormChange} rows={3} className="custom-input" />
-                            </Form.Group>
-                            <Form.Group className="mb-3">
-                                <Form.Label className="text-gray-700">Genre</Form.Label>
-                                <Form.Control type="text" name="genre" value={editFormData.genre} onChange={handleEditFormChange} className="custom-input" />
-                            </Form.Group>
-                            <Form.Group className="mb-3">
-                                <Form.Label className="text-gray-700">Cover Image URL</Form.Label>
-                                <Form.Control type="text" name="coverImageUrl" value={editFormData.coverImageUrl} onChange={handleEditFormChange} className="custom-input" />
-                            </Form.Group>
-                            <Form.Group className="mb-3">
-                                <Form.Label className="text-gray-700">Status</Form.Label>
-                                <Form.Control as="select" name="status" value={editFormData.status} onChange={handleEditFormChange} className="custom-select">
-                                    <option value="Planned">Planned</option>
-                                    <option value="Reading">Reading</option>
-                                    <option value="Finished">Finished</option>
-                                </Form.Control>
-                            </Form.Group>
-                            <Form.Group className="mb-3">
-                                <Form.Label className="text-gray-700">Current Page</Form.Label>
-                                <Form.Control
-                                    type="number"
-                                    name="currentPage"
-                                    value={editFormData.currentPage}
-                                    onChange={handleEditFormChange}
-                                    min="0"
-                                    className="custom-input"
-                                />
-                            </Form.Group>
-                            <Form.Group className="mb-3">
-                                <Form.Label className="text-gray-700">Total Pages</Form.Label>
-                                <Form.Control
-                                    type="number"
-                                    name="totalPages"
-                                    value={editFormData.totalPages}
-                                    onChange={handleEditFormChange}
-                                    min="1"
-                                    className="custom-input"
-                                />
-                            </Form.Group>
-                            <Form.Group className="mb-3">
-                                <Form.Label className="text-gray-700">Notes</Form.Label>
-                                <Form.Control
-                                    as="textarea"
-                                    name="notes"
-                                    value={editFormData.notes}
-                                    onChange={handleEditFormChange}
-                                    rows={4}
-                                    placeholder="Add your private notes about this book here..."
-                                    className="custom-input"
-                                />
-                            </Form.Group>
-                            <Form.Group className="mb-3">
-                                <Form.Label className="text-gray-700">Highlights</Form.Label>
-                                <Form.Control
-                                    as="textarea"
-                                    name="highlights"
-                                    value={editFormData.highlights}
-                                    onChange={handleEditFormChange}
-                                    rows={4}
-                                    placeholder="Add your favorite highlights or quotes here..."
-                                    className="custom-input"
-                                />
-                            </Form.Group>
-                            <Form.Group className="mb-3">
-                                <Form.Label className="text-gray-700">Your Rating (1-5 Stars)</Form.Label>
-                                <StarRatingInput
-                                    value={parseFloat(editFormData.rating) || 0}
-                                    onChange={handleRatingChange}
-                                    size="1.5em"
-                                />
-                                <Form.Text className="text-muted ms-2">
-                                    {editFormData.rating ? `${parseFloat(editFormData.rating).toFixed(1)} / 5` : 'Not Rated'}
-                                </Form.Text>
+                                <Form.Label className="text-gray-700">Your Rating (0-5)</Form.Label>
+                                <div className="d-flex align-items-center">
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="5"
+                                        step="0.5"
+                                        name="rating"
+                                        value={editFormData.rating || 0}
+                                        onChange={(e) => handleEditFormChange(e)} // Use handleEditFormChange for consistency
+                                        className="form-range custom-slider flex-grow-1"
+                                        style={{ '--value': `${((editFormData.rating || 0) / 5) * 100}%` }} // Initial value for gradient fill
+                                    />
+                                    <Form.Text className="text-muted ms-2">
+                                        {editFormData.rating ? `${parseFloat(editFormData.rating).toFixed(1)} / 5` : 'Not Rated'}
+                                    </Form.Text>
+                                </div>
                             </Form.Group>
                             <Form.Group className="mb-3">
                                 <Form.Label className="text-gray-700">Your Review</Form.Label>
@@ -1958,7 +1940,7 @@ function Dashboard() {
                 </Modal>
             )}
 
-            {<Modal show={showGoalModal} onHide={() => setShowGoalModal(false)} centered>
+            {<Modal show={showGoalModal} onHide={() => { setShowGoalModal(false); setGoalFormErrors({}); }} centered>
                 <Modal.Header closeButton style={{ backgroundColor: '#f8f4ed', borderBottom: '1px solid #d4c7b8' }}>
                     <Modal.Title style={{ color: '#5a4434', fontWeight: 'bold' }}>Set New Reading Goal</Modal.Title>
                 </Modal.Header>
@@ -1977,11 +1959,13 @@ function Dashboard() {
                                 type="number"
                                 placeholder={`Enter target ${newGoalType}`}
                                 value={newGoalTarget}
-                                onChange={(e) => setNewGoalTarget(e.target.value)}
+                                onChange={(e) => { setNewGoalTarget(e.target.value); setGoalFormErrors(prev => ({ ...prev, newGoalTarget: undefined })); }}
                                 min="1"
                                 required
+                                isInvalid={!!goalFormErrors.newGoalTarget}
                                 className="custom-input"
                             />
+                            <Form.Control.Feedback type="invalid">{goalFormErrors.newGoalTarget}</Form.Control.Feedback>
                         </Form.Group>
                         <Form.Group className="mb-3">
                             <Form.Label className="text-gray-700">Goal Period</Form.Label>
@@ -1991,7 +1975,7 @@ function Dashboard() {
                             </Form.Control>
                         </Form.Group>
                         <div className="d-flex justify-content-end mt-4">
-                            <Button variant="secondary" onClick={() => setShowGoalModal(false)} className="me-2 custom-button-secondary">
+                            <Button variant="secondary" onClick={() => { setShowGoalModal(false); setGoalFormErrors({}); }} className="me-2 custom-button-secondary">
                                 Cancel
                             </Button>
                             <Button variant="primary" type="submit" className="custom-button-primary">
@@ -2155,8 +2139,8 @@ function Dashboard() {
                     padding: 0.75rem 1.25rem;
                     font-weight: bold;
                     transition: all 0.2s ease-in-out;
-                    width: 100%; /* Added for consistent width */
-                    text-align: center; /* Added for consistent text alignment */
+                    width: 100%;
+                    text-align: center;
                 }
 
                 .custom-tabs .nav-link.active {
@@ -2200,6 +2184,83 @@ function Dashboard() {
                 .modal-footer {
                     border-top: 1px solid #d4c7b8;
                     background-color: #f8f4ed;
+                }
+
+                /* Custom Slider Styles */
+                .custom-slider {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    width: 100%;
+                    height: 4px; /* Even thinner track for minimalism */
+                    background: linear-gradient(to right, #FFD700 0%, #FFD700 var(--value, 0%), #e0d9c8 var(--value, 0%), #e0d9c8 100%); /* Gold progress, lighter brown track */
+                    outline: none;
+                    opacity: 1;
+                    transition: background 0.2s ease-in-out;
+                    border-radius: 2px; /* More minimalistic roundness */
+                }
+
+                .custom-slider:hover {
+                    opacity: 1;
+                }
+
+                /* Slider Track Styles for Webkit (Chrome, Safari) */
+                .custom-slider::-webkit-slider-runnable-track {
+                    height: 4px;
+                    background: #e0d9c8; /* Lighter background for the track */
+                    border-radius: 2px;
+                    border: none;
+                }
+
+                /* Slider Track Styles for Mozilla (Firefox) */
+                .custom-slider::-moz-range-track {
+                    height: 4px;
+                    background: #e0d9c8; /* Lighter background for the track */
+                    border-radius: 2px;
+                    border: none;
+                }
+
+                /* Slider Thumb Styles for Webkit (Chrome, Safari) */
+                .custom-slider::-webkit-slider-thumb {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    width: 24px; /* Slightly smaller for minimalism */
+                    height: 24px;
+                    background: #FFD700; /* Gold background for the star */
+                    cursor: grab;
+                    border-radius: 50%;
+                    margin-top: -10px; /* Adjust to center vertically on the track */
+                    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25); /* More pronounced shadow */
+                    border: 1px solid #b8860b; /* Thinner border */
+                    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23FFFFFF'%3E%3Cpath d='M12 .587l3.668 7.425 8.219 1.192-5.942 5.797 1.403 8.182-7.348-3.864-7.348 3.864 1.403-8.182-5.942-5.797 8.219-1.192z'/%3E%3C/svg%3E");
+                    background-size: 60%; /* Slightly smaller star within the thumb */
+                    background-repeat: no-repeat;
+                    background-position: center;
+                    transition: background-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out;
+                }
+                .custom-slider::-webkit-slider-thumb:active {
+                    transform: scale(1.1); /* Slight enlarge on active */
+                    cursor: grabbing;
+                }
+
+
+                /* Slider Thumb Styles for Mozilla (Firefox) */
+                .custom-slider::-moz-range-thumb {
+                    width: 24px;
+                    height: 24px;
+                    background: #FFD700;
+                    cursor: grab;
+                    border-radius: 50%;
+                    border: 1px solid #b8860b;
+                    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25);
+                    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23FFFFFF'%3E%3Cpath d='M12 .587l3.668 7.425 8.219 1.192-5.942 5.797 1.403 8.182-7.348-3.864-7.348 3.864 1.403-8.182-5.942-5.797 8.219-1.192z'/%3E%3C/svg%3E");
+                    background-size: 60%;
+                    background-repeat: no-repeat;
+                    background-position: center;
+                    transition: background-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out;
+                }
+                .custom-slider::-moz-range-thumb:active {
+                    transform: scale(1.1); /* Slight enlarge on active */
+                    cursor: grabbing;
                 }
             `}</style>
         </Container>

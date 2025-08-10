@@ -2,12 +2,21 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 require('dotenv').config(); // Load environment variables from .env file
+const path = require('path'); // NEW: Import path module for serving static files
 
 const app = express();
 
 // Middleware
 app.use(cors()); // Enable CORS for all routes
-app.use(express.json()); // Enable parsing of JSON request bodies
+
+// IMPORTANT FIX: Increase body parser limits to allow larger payloads (e.g., for image uploads)
+app.use(express.json({ limit: '50mb' })); // Enable parsing of JSON request bodies with increased limit
+app.use(express.urlencoded({ limit: '50mb', extended: true })); // Enable parsing of URL-encoded data with increased limit
+
+// NEW: Serve static files from the 'uploads' directory
+// This allows your frontend to access uploaded images via URLs like http://localhost:5000/uploads/profile_images/your-image.jpg
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 
 // Import all route files
 const authRoutes = require('./routes/auth');
