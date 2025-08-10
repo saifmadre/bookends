@@ -39,6 +39,7 @@ if (!getApps().length) {
     } catch (e) {
         console.error("AuthContext: Error retrieving existing Firebase app:", e);
         // Fallback for unexpected issues, though typically `getApps().length` handles this
+        // If this error occurs, it indicates a deeper issue with app registration.
         throw new Error("AuthContext: Failed to get existing Firebase app. Check for multiple initializations or misconfigurations.");
     }
 }
@@ -74,7 +75,9 @@ export const AuthProvider = ({ children }) => {
     const [isRegistering, setIsRegistering] = useState(false);
     const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-    // No need for Axios or custom token state/logic (`token`) as we're directly using Firebase Auth
+    // New state to prevent automatic re-login after explicit logout
+    const [isManuallyLoggedOut, setIsManuallyLoggedOut] = useState(false);
+
 
     /**
      * loadUserProfile: Fetches a user's custom profile data from Firestore.
@@ -133,28 +136,39 @@ export const AuthProvider = ({ children }) => {
                 // If a Firebase user is signed in
                 setUserId(user.uid);
                 await loadUserProfile(user.uid); // Load or create their custom profile
+                setIsManuallyLoggedOut(false); // Reset logout flag on successful sign-in
             } else {
-                // If no Firebase user is currently signed in, attempt initial anonymous or custom token login
-                console.log('AuthContext: No Firebase user. Attempting initial anonymous or custom token login.');
-                try {
-                    if (initialAuthToken) {
-                        // Sign in with a custom token provided by the Canvas environment
-                        const customTokenUserCredential = await signInWithCustomToken(auth, initialAuthToken);
-                        console.log('AuthContext: Successfully signed in with custom token.');
-                        setFirebaseUser(customTokenUserCredential.user);
-                        setUserId(customTokenUserCredential.user.uid);
-                        await loadUserProfile(customTokenUserCredential.user.uid);
-                    } else {
-                        // If no custom token, sign in anonymously (common for initial app load in Canvas)
-                        const anonymousUserCredential = await signInAnonymously(auth);
-                        console.log('AuthContext: Successfully signed in anonymously. UID:', anonymousUserCredential.user.uid);
-                        setFirebaseUser(anonymousUserCredential.user);
-                        setUserId(anonymousUserCredential.user.uid);
-                        await loadUserProfile(anonymousUserCredential.user.uid);
+                // Only attempt anonymous/custom token login if not explicitly logged out
+                // and if it's the initial load (loading is true) or not explicitly logged out.
+                if (!isManuallyLoggedOut) { // Only attempt if not manually logged out
+                    console.log('AuthContext: No Firebase user. Attempting initial anonymous or custom token login.');
+                    try {
+                        if (initialAuthToken) {
+                            // Sign in with a custom token provided by the Canvas environment
+                            const customTokenUserCredential = await signInWithCustomToken(auth, initialAuthToken);
+                            console.log('AuthContext: Successfully signed in with custom token.');
+                            setFirebaseUser(customTokenUserCredential.user);
+                            setUserId(customTokenUserCredential.user.uid);
+                            await loadUserProfile(customTokenUserCredential.user.uid);
+                        } else {
+                            // If no custom token, sign in anonymously (common for initial app load in Canvas)
+                            const anonymousUserCredential = await signInAnonymously(auth);
+                            console.log('AuthContext: Successfully signed in anonymously. UID:', anonymousUserCredential.user.uid);
+                            setFirebaseUser(anonymousUserCredential.user);
+                            setUserId(anonymousUserCredential.user.uid);
+                            await loadUserProfile(anonymousUserCredential.user.uid);
+                        }
+                    } catch (error) {
+                        console.error("AuthContext: Firebase initial authentication (anonymous/custom token) failed:", error);
+                        // If even anonymous/custom token auth fails, user is not authenticated.
+                        setUser(null);
+                        setFirebaseUser(null);
+                        setUserId(null);
+                        setIsAuthenticated(false);
                     }
-                } catch (error) {
-                    console.error("AuthContext: Firebase initial authentication (anonymous/custom token) failed:", error);
-                    // If even anonymous/custom token auth fails, user is not authenticated.
+                } else {
+                    console.log("AuthContext: User explicitly logged out. Not attempting anonymous/custom token login.");
+                    // If manually logged out, ensure all user states are cleared
                     setUser(null);
                     setFirebaseUser(null);
                     setUserId(null);
@@ -170,7 +184,8 @@ export const AuthProvider = ({ children }) => {
             console.log("AuthContext: Unsubscribing from onAuthStateChanged listener.");
             unsubscribe();
         };
-    }, [initialAuthToken, loadUserProfile]); // Dependencies: re-run if initial token or profile loading logic changes
+    }, [initialAuthToken, loadUserProfile, isManuallyLoggedOut]); // Added isManuallyLoggedOut to dependencies
+
 
     /**
      * register: Registers a new user with Firebase Authentication and saves profile to Firestore.
@@ -198,6 +213,8 @@ export const AuthProvider = ({ children }) => {
             console.log('AuthContext: User profile saved to Firestore for UID:', uid);
 
             // No custom backend token handling needed here; Firebase's onAuthStateChanged will update the state.
+            // Reset logout flag upon successful registration
+            setIsManuallyLoggedOut(false);
             return { success: true, uid: uid }; // Return success status
 
         } catch (err) {
@@ -220,6 +237,8 @@ export const AuthProvider = ({ children }) => {
             await signInWithEmailAndPassword(auth, identifier, password);
             console.log('AuthContext: Firebase login successful.');
             // `onAuthStateChanged` listener will automatically handle updating the AuthContext state (user, isAuthenticated, etc.)
+            // Reset logout flag upon successful login
+            setIsManuallyLoggedOut(false);
             return { success: true }; // Return success status
         } catch (err) {
             console.error('AuthContext: Firebase login error:', err.message, err.code);
@@ -236,15 +255,22 @@ export const AuthProvider = ({ children }) => {
     const logout = async () => {
         try {
             console.log('AuthContext: Attempting Firebase logout.');
+            // Set the flag *before* signing out
+            setIsManuallyLoggedOut(true);
             await signOut(auth); // Sign out user from Firebase
-            // Clear all user-related states after successful Firebase sign out
+            // Clearing states will now be handled by onAuthStateChanged,
+            // but for immediate UI consistency, we can clear them here too.
+            // However, it's safer to let onAuthStateChanged be the single source of truth.
+            // For now, let's keep minimal clearing and rely on onAuthStateChanged.
             setUser(null);
             setFirebaseUser(null);
             setUserId(null);
             setIsAuthenticated(false);
-            console.log('AuthContext: User logged out successfully from Firebase. All user-related state reset.');
+            console.log('AuthContext: User logged out successfully from Firebase.');
         } catch (error) {
             console.error('AuthContext: Error during logout:', error);
+            // If logout fails, ensure the flag is reset to allow re-login attempts
+            setIsManuallyLoggedOut(false);
             throw error; // Re-throw any logout errors
         }
     };
