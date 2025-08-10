@@ -13,31 +13,35 @@ import { ToastProvider } from './contexts/ToastContext';
 
 // Components
 import AdminDashboard from './components/AdminDashboard.jsx';
-// RE-ENABLED: Import BookList as it's used in a route
 import BookList from './components/BookList';
 import ChangePassword from './components/ChangePassword.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import DeleteAccount from './components/DeleteAccount.jsx';
 import Login from './components/login.jsx';
-import NotFoundPage from './components/NotFoundPage.jsx'; // Corrected import for 404
+import NotFoundPage from './components/NotFoundPage.jsx';
 import Profile from './components/Profile.jsx';
 import Register from './components/register.jsx';
-import ResetPassword from './components/ResetPassword.jsx'; // Corrected import for ResetPassword
-import UsersPage from './components/UsersPage.jsx'; // NEW: Import UsersPage
+import ResetPassword from './components/ResetPassword.jsx';
+import UsersPage from './components/UsersPage.jsx';
 
 // ProtectedRoute Component: Wraps routes that require authentication
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation(); // Get current location
 
   useEffect(() => {
+    console.log(`ProtectedRoute for path: ${location.pathname} - loading: ${loading}, isAuthenticated: ${isAuthenticated}`);
+    // If authentication is done loading AND user is NOT authenticated, redirect to login
     if (!loading && !isAuthenticated) {
-      console.log('ProtectedRoute: Not authenticated, redirecting to login...');
+      console.log(`ProtectedRoute: Not authenticated (loading: ${loading}, isAuthenticated: ${isAuthenticated}), redirecting to /login.`);
       navigate('/login', { replace: true });
     }
-  }, [isAuthenticated, loading, navigate]);
+  }, [isAuthenticated, loading, navigate, location.pathname]); // Added location.pathname to dependencies
 
   if (loading) {
+    // Show a loading indicator while authentication status is being determined
+    console.log('ProtectedRoute: Authentication is still loading, rendering loading message.');
     return (
       <div className="book-theme-app d-flex align-items-center justify-content-center min-vh-100">
         <p className="book-form-text">Loading authentication status...</p>
@@ -45,32 +49,55 @@ const ProtectedRoute = ({ children }) => {
     );
   }
 
-  if (!isAuthenticated) {
-    return null;
+  // If loading is false and isAuthenticated is true, render children
+  // If loading is false and isAuthenticated is false, the useEffect above will handle redirection
+  if (isAuthenticated) {
+    console.log('ProtectedRoute: Authenticated, rendering children.');
+    return children;
   }
 
-  return children;
+  // If not authenticated and not loading, we explicitly return null here
+  // because the useEffect already triggered the navigation. This prevents
+  // momentarily rendering the protected content before redirect.
+  console.log('ProtectedRoute: Not authenticated and not loading, returning null (redirect handled).');
+  return null;
 };
+
+// RedirectToAuthPage Component: Handles initial redirection from root based on auth status
+const RedirectToAuthPage = () => {
+  const { isAuthenticated, loading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    console.log(`RedirectToAuthPage: Effect triggered. loading: ${loading}, isAuthenticated: ${isAuthenticated}`);
+    if (!loading) { // Once authentication state is determined
+      if (isAuthenticated) {
+        console.log('RedirectToAuthPage: Authenticated, redirecting to /dashboard.');
+        navigate('/dashboard', { replace: true });
+      } else {
+        console.log('RedirectToAuthPage: Not authenticated, redirecting to /login.');
+        navigate('/login', { replace: true });
+      }
+    }
+  }, [isAuthenticated, loading, navigate]);
+
+  if (loading) {
+    return (
+      <div className="book-theme-app d-flex align-items-center justify-content-center min-vh-100">
+        <p className="book-form-text">Initializing application...</p>
+      </div>
+    );
+  }
+
+  // This component handles redirection, so it doesn't render anything itself
+  return null;
+};
+
 
 // AppContent Component: Contains the main layout and routes
 function AppContent() {
-  const { user, logout, loading } = useAuth();
+  const { user, logout, loading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-
-  useEffect(() => {
-    if (!loading) {
-      if (location.pathname === '/') {
-        if (user) {
-          console.log('AppContent: Authenticated, redirecting from / to /dashboard');
-          navigate('/dashboard', { replace: true });
-        } else {
-          console.log('AppContent: Not authenticated, redirecting from / to /login');
-          navigate('/login', { replace: true });
-        }
-      }
-    }
-  }, [user, loading, location.pathname, navigate]);
 
   const handleLogout = async () => {
     try {
@@ -82,9 +109,7 @@ function AppContent() {
     }
   };
 
-  // eslint-disable-next-line no-unused-vars
-  const isHomePage = location.pathname === '/';
-
+  // Global loading indicator for the entire application wrapper
   if (loading) {
     return (
       <div className="book-theme-app d-flex align-items-center justify-content-center min-vh-100">
@@ -95,7 +120,6 @@ function AppContent() {
 
   return (
     <div className="d-flex flex-column min-vh-100">
-      {/* User's preferred header content */}
       <nav className="navbar navbar-expand-lg navbar-dark bg-dark">
         <div className="container-fluid">
           <Link className="navbar-brand" to="/">BookEnds</Link>
@@ -104,21 +128,13 @@ function AppContent() {
           </button>
           <div className="collapse navbar-collapse" id="navbarNav">
             <ul className="navbar-nav me-auto mb-2 mb-lg-0">
-              {user ? (
+              {isAuthenticated ? ( // Use isAuthenticated here
                 <>
                   <li className="nav-item">
                     <Link to="/dashboard" className="nav-link custom-nav-link">
                       Dashboard
                     </Link>
                   </li>
-                  {/* REMOVED: My Reading List link from the main navigation */}
-                  {/*
-                  <li className="nav-item">
-                    <Link to="/reading-list" className="nav-link custom-nav-link">
-                      My Reading List
-                    </Link>
-                  </li>
-                  */}
                   <li className="nav-item">
                     <Link to="/users" className="nav-link custom-nav-link">
                       Find Users
@@ -137,7 +153,6 @@ function AppContent() {
                     <ul className="dropdown-menu" aria-labelledby="navbarDropdown">
                       <li><Link className="dropdown-item" to="/change-password">Change Password</Link></li>
                       <li><Link className="dropdown-item" to="/delete-account">Delete Account</Link></li>
-                      {/* NEW: Admin Dashboard link, only visible if user is an admin */}
                       {user?.role === 'admin' && (
                         <li><Link className="dropdown-item" to="/admin-dashboard">Admin Dashboard</Link></li>
                       )}
@@ -170,64 +185,56 @@ function AppContent() {
           {/* Public Routes */}
           <Route path="/register" element={<Register />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
-          {/* Root path: If authenticated, redirect to Dashboard. Otherwise, show Login. */}
-          <Route path="/" element={user ? <ProtectedRoute><Dashboard /></ProtectedRoute> : <Login />} />
+          {/* Root path now uses the redirection helper component */}
+          <Route path="/" element={<RedirectToAuthPage />} />
 
           {/* Protected Routes - wrapped with ProtectedRoute */}
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
-          {/* Updated Profile route to handle optional userId parameter */}
           <Route path="/profile/:userId?" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/change-password" element={<ProtectedRoute><ChangePassword /></ProtectedRoute>} />
           <Route path="/delete-account" element={<ProtectedRoute><DeleteAccount /></ProtectedRoute>} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-
-          {/* NEW: Route for the BookList component, protected */}
-          {/* Kept the route, even if the direct nav link is removed. */}
           <Route path="/reading-list" element={<ProtectedRoute><BookList /></ProtectedRoute>} />
 
-          {/* Admin Protected Route - only the route remains, link is now in UI dropdown */}
+          {/* Admin Protected Route */}
           <Route path="/admin-dashboard" element={
             <ProtectedRoute>
               {user?.role === 'admin' ? <AdminDashboard /> : <Dashboard />}
             </ProtectedRoute>
           } />
 
-          {/* Fallback route for any unmatched paths - MUST be the last route */}
+          {/* Fallback route for any unmatched paths */}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </div>
 
-      {/* Footer section (kept simple for now) */}
       <footer className="bg-dark text-white text-center py-3 mt-5">
         <p className="m-0">&copy; 2024 BookEnds. All rights reserved.</p>
       </footer>
 
-      {/* Custom Styles for Navigation Links */}
       <style jsx>{`
         .custom-nav-link {
-          color: white; /* White text for visibility on dark background */
+          color: white;
           font-weight: 600;
-          padding: 0.5rem 1rem; /* Add some padding for clickability */
-          border-radius: 0.375rem; /* Slightly rounded corners */
+          padding: 0.5rem 1rem;
+          border-radius: 0.375rem;
           transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
         }
 
         .custom-nav-link:hover {
-          background-color: rgba(255, 255, 255, 0.1); /* Subtle white background on hover */
-          color: white; /* Keep text white on hover */
-          text-decoration: none; /* Remove underline on hover */
+          background-color: rgba(255, 255, 255, 0.1);
+          color: white;
+          text-decoration: none;
         }
 
         .custom-nav-link.dropdown-toggle {
-          /* Specific styles for dropdown toggle if needed */
-          background-color: transparent; /* Ensure no background for dropdown toggle */
+          background-color: transparent;
           color: white;
         }
 
         .custom-nav-link.dropdown-toggle::after {
-          /* Adjust dropdown arrow color if needed */
           color: white;
         }
       `}</style>
@@ -240,10 +247,9 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        {/* ToastProvider and ToastNotification are now here, wrapping AppContent */}
         <ToastProvider>
           <AppContent />
-          <ToastNotification /> {/* Render ToastNotification here to be globally available */}
+          <ToastNotification />
         </ToastProvider>
       </AuthProvider>
     </Router>
