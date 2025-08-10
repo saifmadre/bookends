@@ -3,6 +3,7 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import { createUserWithEmailAndPassword, getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc, getFirestore, setDoc } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage'; // Import getStorage
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'; // Added useRef
 
 const AuthContext = createContext(null);
@@ -22,13 +23,10 @@ const hardcodedFirebaseConfig = {
 // Check for Vercel environment variable first, then fallback to local hardcoded config
 let firebaseConfig;
 try {
-    // Vercel injects environment variables as process.env.YOUR_VAR_NAME
-    // We assume the user has set FIREBASE_CONFIG in Vercel.
     if (typeof process !== 'undefined' && process.env.FIREBASE_CONFIG) {
         firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG);
         console.log("[AuthContext Init] Using Firebase config from Vercel environment variable.");
     } else if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-        // This block is primarily for the Canvas environment if it directly injects __firebase_config
         firebaseConfig = JSON.parse(__firebase_config);
         console.log("[AuthContext Init] Using Firebase config from Canvas '__firebase_config'.");
     } else {
@@ -57,7 +55,9 @@ if (!getApps().length) {
 
 const auth = getAuth(app);
 const db = getFirestore(app);
-console.log("[AuthContext Init] Firebase Auth and Firestore services are ready.");
+const storage = getStorage(app); // Initialize Firebase Storage
+
+console.log("[AuthContext Init] Firebase Auth, Firestore, and Storage services are ready.");
 
 export const useAuth = () => {
     const context = useContext(AuthContext);
@@ -123,12 +123,19 @@ export const AuthProvider = ({ children }) => {
                 console.log(`[loadUserProfile] Profile loaded for UID: ${uid}. Username: ${profileData.username || 'N/A'}. Setting isAuthenticated: ${newIsAuthenticated}`);
             } else {
                 console.warn(`[loadUserProfile] No custom Firestore profile found for UID: ${uid}.`);
+                // If no custom profile, set user with basic Firebase Auth data and assume a default role
                 setUser({
                     id: uid,
-                    username: firebaseAuthUser.email || `User_${uid.substring(0, 6)}`,
+                    username: firebaseAuthUser.displayName || firebaseAuthUser.email || `User_${uid.substring(0, 6)}`,
                     email: firebaseAuthUser.email || null,
-                    role: 'user',
-                    date: new Date().toISOString()
+                    role: 'user', // Default role
+                    date: new Date().toISOString(), // Default registration date
+                    bio: '',
+                    profileImage: '',
+                    socialLinks: {},
+                    booksFinished: 0,
+                    averageRating: 'N/A',
+                    favoriteGenre: 'N/A'
                 });
                 setIsAuthenticated(!firebaseAuthUser.isAnonymous);
                 console.log(`[loadUserProfile] No custom profile, setting user with Firebase Auth data. isAuthenticated: ${!firebaseAuthUser.isAnonymous}`);
@@ -179,12 +186,19 @@ export const AuthProvider = ({ children }) => {
             console.log('[AuthContext - Register] Firebase user created successfully with UID:', uid);
 
             const userProfileDocRef = doc(db, `artifacts/${appId}/users`, uid);
+            // Ensure all profile fields expected by Profile.jsx and EditProfile.jsx are initialized
             await setDoc(userProfileDocRef, {
                 username: username,
                 email: email,
                 phoneNumber: phoneNumber || null,
-                role: 'user',
-                date: new Date().toISOString()
+                role: 'user', // Default role
+                date: new Date().toISOString(), // Registration date
+                bio: '',
+                profileImage: '', // Initialize with empty string for no image
+                socialLinks: { goodreads: '', twitter: '', instagram: '' }, // Initialize as empty object
+                booksFinished: 0,
+                averageRating: 'N/A',
+                favoriteGenre: 'N/A'
             });
             console.log('[AuthContext - Register] User profile saved to Firestore for UID:', uid);
 
@@ -244,7 +258,8 @@ export const AuthProvider = ({ children }) => {
         login,
         logout,
         db,
-        auth
+        auth,
+        storage // Expose storage here
     };
 
     useEffect(() => {

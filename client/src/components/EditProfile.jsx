@@ -1,20 +1,25 @@
 // src/components/EditProfile.jsx
-import React, { useEffect, useState } from 'react';
+import { doc, getDoc, updateDoc } from 'firebase/firestore'; // Import Firestore functions
+import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage'; // Import Storage functions
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Button, Container, Form, Image, InputGroup, Modal, Spinner } from 'react-bootstrap';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 
 // EditProfile component now accepts props for modal control
 function EditProfile({ show, onHide }) {
-    const { user, isAuthenticated, token, loading: authLoading, refreshUser } = useAuth();
+    // Destructure db, storage, and firebaseUser from useAuth
+    const { user, isAuthenticated, loading: authLoading, refreshUser, db, storage, firebaseUser } = useAuth();
     const { showToast } = useToast();
+
+    const currentAppId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
     const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
     const [bio, setBio] = useState('');
-    const [profileImage, setProfileImage] = useState(null);
-    const [newProfileImageFile, setNewProfileImageFile] = useState(null);
-    const [newProfileImagePreview, setNewProfileImagePreview] = useState(null);
+    const [profileImage, setProfileImage] = useState(null); // Current image URL from profileData
+    const [newProfileImageFile, setNewProfileImageFile] = useState(null); // New file selected by user
+    const [newProfileImagePreview, setNewProfileImagePreview] = useState(null); // URL for preview of new image
 
     const [socialLinks, setSocialLinks] = useState({
         goodreads: '',
@@ -22,8 +27,8 @@ function EditProfile({ show, onHide }) {
         instagram: ''
     });
 
-    const [loading, setLoading] = useState(true);
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [loading, setLoading] = useState(true); // Loading for fetching initial profile data
+    const [isSubmitting, setIsSubmitting] = useState(false); // Loading for form submission
     const [message, setMessage] = useState('');
     const [isError, setIsError] = useState(false);
 
@@ -34,60 +39,65 @@ function EditProfile({ show, onHide }) {
 
     const [fetchError, setFetchError] = useState('');
 
-    // Fetch current profile data on component mount or when modal is shown
-    useEffect(() => {
-        const fetchCurrentProfile = async () => {
-            if (!show || authLoading) {
-                setLoading(true);
-                return;
-            }
-
-            if (isAuthenticated && token) {
-                setLoading(true);
-                setFetchError('');
-                try {
-                    const response = await fetch('http://localhost:5000/api/profile', {
-                        method: 'GET',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'x-auth-token': token,
-                        },
-                    });
-                    const data = await response.json();
-                    if (response.ok) {
-                        setUsername(data.username || '');
-                        setEmail(data.email || '');
-                        setBio(data.bio || '');
-                        setProfileImage(data.profileImage || null);
-                        setSocialLinks({
-                            goodreads: data.socialLinks?.goodreads || '',
-                            twitter: data.socialLinks?.twitter || '',
-                            instagram: data.socialLinks?.instagram || ''
-                        });
-                        setNewProfileImageFile(null);
-                        setNewProfileImagePreview(null);
-                    } else {
-                        setMessage(data.msg || 'Failed to load current profile data.');
-                        setIsError(true);
-                        setFetchError(data.msg || 'Failed to load current profile data.');
-                    }
-                } catch (err) {
-                    console.error("Error fetching current profile:", err);
-                    setMessage("Network error or server unavailable.");
-                    setIsError(true);
-                    setFetchError("Network error or server unavailable.");
-                } finally {
-                    setLoading(false);
-                }
-            } else {
-                setLoading(false);
-                setMessage("You need to be logged in to edit your profile.");
-                setIsError(true);
+    // Fetch current profile data from Firestore
+    const fetchCurrentProfile = useCallback(async () => {
+        if (!show || authLoading || !db || !isAuthenticated || !user?.id) {
+            // Defer fetching if modal is not shown, auth is loading, or not authenticated/db not ready
+            if (show && !isAuthenticated) {
                 setFetchError("You need to be logged in to edit your profile.");
+                setLoading(false);
+            } else if (!db) {
+                setFetchError("Database not initialized. Please ensure Firebase is configured.");
+                setLoading(false);
             }
-        };
+            return;
+        }
+
+        setLoading(true);
+        setFetchError('');
+        setMessage(''); // Clear messages on new fetch
+
+        try {
+            console.log(`EditProfile: Attempting to fetch profile for UID: ${user.id}`);
+            const userProfileDocRef = doc(db, `artifacts/${currentAppId}/users`, user.id);
+            const userProfileDocSnap = await getDoc(userProfileDocRef);
+
+            if (userProfileDocSnap.exists()) {
+                const data = userProfileDocSnap.data();
+                setUsername(data.username || '');
+                setEmail(data.email || '');
+                setBio(data.bio || '');
+                setProfileImage(data.profileImage || null); // Set current profile image URL
+                setSocialLinks(data.socialLinks || { goodreads: '', twitter: '', instagram: '' });
+                setNewProfileImageFile(null); // Clear any pending new file
+                setNewProfileImagePreview(null); // Clear preview of new file
+                console.log("EditProfile: Successfully loaded profile data from Firestore:", data);
+            } else {
+                setFetchError('Your profile data was not found in Firestore. Please ensure you are registered correctly.');
+                console.warn("EditProfile: Profile document not found for current user in Firestore.");
+                // Fallback to basic user data if Firestore doc doesn't exist but Firebase Auth user does
+                if (user) {
+                    setUsername(user.username || user.email || '');
+                    setEmail(user.email || '');
+                    setBio('');
+                    setProfileImage(null);
+                    setSocialLinks({ goodreads: '', twitter: '', instagram: '' });
+                }
+            }
+        } catch (err) {
+            console.error("EditProfile: Error fetching current profile from Firestore:", err);
+            setFetchError(err.message || "Failed to load current profile data. Please check network or Firestore rules.");
+        } finally {
+            setLoading(false);
+        }
+    }, [show, isAuthenticated, user, authLoading, db, currentAppId]); // Added db and currentAppId to dependencies
+
+
+    // Effect to trigger fetching profile when modal shows or auth state changes
+    useEffect(() => {
         fetchCurrentProfile();
-    }, [show, isAuthenticated, user, token, authLoading]);
+    }, [fetchCurrentProfile]);
+
 
     // Validation functions
     const validateUsername = (name) => {
@@ -151,12 +161,13 @@ function EditProfile({ show, onHide }) {
                 setProfileImageError('File size exceeds 2MB limit.');
                 setNewProfileImageFile(null);
                 setNewProfileImagePreview(null);
+                showToast('File size exceeds 2MB limit.', 'danger', 'Image Error');
                 return;
             }
             const reader = new FileReader();
             reader.onloadend = () => {
-                setNewProfileImagePreview(reader.result);
-                setNewProfileImageFile(file);
+                setNewProfileImagePreview(reader.result); // For immediate visual preview
+                setNewProfileImageFile(file); // Store the actual file object
                 setProfileImageError('');
             };
             reader.readAsDataURL(file);
@@ -173,6 +184,7 @@ function EditProfile({ show, onHide }) {
         setIsError(false);
         setIsSubmitting(true);
 
+        // Client-side validation
         const isUsernameValid = validateUsername(username);
         const isEmailValid = validateEmail(email);
         const isBioValid = validateBio(bio);
@@ -185,48 +197,74 @@ function EditProfile({ show, onHide }) {
             return;
         }
 
-        const formData = new FormData();
-        formData.append('username', username);
-        formData.append('email', email);
-        formData.append('bio', bio);
-        formData.append('socialLinks', JSON.stringify(socialLinks));
-
-        if (newProfileImageFile) {
-            formData.append('profileImage', newProfileImageFile);
+        if (!isAuthenticated || !user?.id || !db || !storage || !firebaseUser) {
+            setMessage("You need to be logged in to update your profile.");
+            setIsError(true);
+            setIsSubmitting(false);
+            showToast("You need to be logged in to update your profile.", 'danger', 'Authentication Error');
+            return;
         }
 
+        let newProfileImageUrl = profileImage; // Start with current image URL
+
         try {
-            const response = await fetch('http://localhost:5000/api/profile/update', {
-                method: 'PUT',
-                headers: {
-                    'x-auth-token': token,
-                },
-                body: formData,
-            });
+            // Step 1: Handle profile image upload to Firebase Storage
+            if (newProfileImageFile) {
+                console.log("EditProfile: Uploading new profile image to Firebase Storage...");
+                const storageRef = ref(storage, `artifacts/${currentAppId}/user_profile_images/${user.id}/${newProfileImageFile.name}`);
+                await uploadBytes(storageRef, newProfileImageFile);
+                newProfileImageUrl = await getDownloadURL(storageRef);
+                console.log("EditProfile: New profile image uploaded. URL:", newProfileImageUrl);
 
-            const data = await response.json();
-
-            if (response.ok) {
-                setMessage(data.msg || 'Profile updated successfully!');
-                setIsError(false);
-                showToast(data.msg || 'Profile updated successfully!', 'success', 'Success');
-                await refreshUser();
-                setNewProfileImageFile(null);
-                setNewProfileImagePreview(null);
-                if (data.profileImage) {
-                    setProfileImage(data.profileImage);
+                // Optional: Delete old image from Storage if it's different and exists (to save space)
+                // This requires careful consideration if the old image URL could be shared or default
+                if (profileImage && profileImage !== defaultProfileImage && profileImage !== newProfileImageUrl) {
+                    try {
+                        const oldImageRef = ref(storage, profileImage);
+                        await deleteObject(oldImageRef);
+                        console.log("EditProfile: Old profile image deleted from Storage:", profileImage);
+                    } catch (deleteError) {
+                        console.warn("EditProfile: Could not delete old profile image (might not exist or different path):", deleteError);
+                    }
                 }
-                onHide(); // Close the modal on success
-            } else {
-                setMessage(data.msg || 'Failed to update profile.');
-                setIsError(true);
-                showToast(data.msg || 'Failed to update profile.', 'danger', 'Error');
+            } else if (profileImage === null && newProfileImagePreview === null) {
+                // If user cleared the image or there was no image, explicitly set to empty string
+                newProfileImageUrl = '';
             }
+
+
+            // Step 2: Update user profile document in Firestore
+            console.log("EditProfile: Updating user profile document in Firestore...");
+            const userProfileDocRef = doc(db, `artifacts/${currentAppId}/users`, user.id);
+            await updateDoc(userProfileDocRef, {
+                username: username,
+                email: email, // Note: Changing email in Firestore does not change Firebase Auth email
+                bio: bio,
+                profileImage: newProfileImageUrl, // Save the new image URL
+                socialLinks: socialLinks,
+                // The current user object from AuthContext already contains id, date, role, phoneNumber
+                // No need to explicitly update them here unless they are part of the editable form.
+            });
+            console.log("EditProfile: Profile document updated in Firestore.");
+
+            // Step 3: Refresh user data in AuthContext to propagate changes
+            if (refreshUser && typeof refreshUser === 'function') {
+                console.log("EditProfile: Refreshing user data in AuthContext.");
+                await refreshUser(); // Assuming refreshUser updates the 'user' state in AuthContext
+            }
+
+            setMessage('Profile updated successfully!');
+            setIsError(false);
+            showToast('Profile updated successfully!', 'success', 'Success');
+            setNewProfileImageFile(null);
+            setNewProfileImagePreview(null);
+            onHide(); // Close the modal on success
+
         } catch (err) {
-            console.error("Error updating profile:", err);
-            setMessage("Network error or server unavailable. Please try again later.");
+            console.error("EditProfile: Error updating profile (Firestore/Storage):", err);
+            setMessage(err.message || "Failed to update profile. Please try again.");
             setIsError(true);
-            showToast("Network error or server unavailable. Please try again later.", 'danger', 'Network Error');
+            showToast(err.message || "Failed to update profile.", 'danger', 'Error');
         } finally {
             setIsSubmitting(false);
         }
@@ -235,8 +273,11 @@ function EditProfile({ show, onHide }) {
     const isFormValid = username && email && !usernameError && !emailError && !bioError && !profileImageError;
 
     // Placeholder for user avatar (e.g., first letter of username)
-    const userAvatarInitial = user?.username ? user.username.charAt(0).toUpperCase() : '?';
-    const defaultProfileImage = `https://placehold.co/100x100/d4c7b8/5a4434?text=${userAvatarInitial}`;
+    // Use the currently selected preview or the existing profileImage or default
+    const currentDisplayedImage = newProfileImagePreview || profileImage;
+    const userAvatarInitial = user?.username ? user.username.charAt(0).toUpperCase() : (email ? email.charAt(0).toUpperCase() : '?');
+    const defaultProfileImagePlaceholder = `https://placehold.co/120x120/d4c7b8/5a4434?text=${userAvatarInitial}`;
+
 
     return (
         <Modal show={show} onHide={onHide} centered size="lg">
@@ -254,7 +295,7 @@ function EditProfile({ show, onHide }) {
                 ) : fetchError ? (
                     <Alert variant="danger" className="mb-0">{fetchError}</Alert>
                 ) : (
-                    <Container className="book-form-container p-4 rounded shadow-md bg-white"> {/* Added Container here */}
+                    <Container className="book-form-container p-4 rounded shadow-md bg-white">
                         {message && (
                             <Alert variant={isError ? 'danger' : 'success'} className="mb-3">
                                 {message}
@@ -267,10 +308,11 @@ function EditProfile({ show, onHide }) {
                                 <Form.Label className="book-form-label mb-3">Profile Avatar</Form.Label>
                                 <div className="profile-image-upload-area mb-3">
                                     <Image
-                                        src={newProfileImagePreview || profileImage || defaultProfileImage}
+                                        src={currentDisplayedImage || defaultProfileImagePlaceholder}
                                         alt="Profile Preview"
                                         className="profile-upload-preview"
                                         roundedCircle
+                                        onError={(e) => { e.target.onerror = null; e.target.src = defaultProfileImagePlaceholder; }}
                                     />
                                     <Form.Control
                                         type="file"
@@ -282,6 +324,21 @@ function EditProfile({ show, onHide }) {
                                 {profileImageError && <div className="invalid-feedback d-block">{profileImageError}</div>}
                                 <Form.Text className="text-muted">
                                     Upload a new profile picture (Max 2MB).
+                                    {currentDisplayedImage && (
+                                        <Button
+                                            variant="link"
+                                            onClick={() => {
+                                                setProfileImage(null); // Clear current image
+                                                setNewProfileImageFile(null); // Clear selected file
+                                                setNewProfileImagePreview(null); // Clear preview
+                                                showToast("Profile image cleared. It will be removed on save.", 'info', 'Image Removed');
+                                            }}
+                                            className="ms-2 text-danger"
+                                            size="sm"
+                                        >
+                                            Remove current image
+                                        </Button>
+                                    )}
                                 </Form.Text>
                             </Form.Group>
 
