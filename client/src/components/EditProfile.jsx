@@ -218,7 +218,7 @@ function EditProfile({ show, onHide }) {
 
                 // Optional: Delete old image from Storage if it's different and exists (to save space)
                 // This requires careful consideration if the old image URL could be shared or default
-                if (profileImage && profileImage !== defaultProfileImage && profileImage !== newProfileImageUrl) {
+                if (profileImage && profileImage !== defaultProfileImagePlaceholder && profileImage !== newProfileImageUrl) {
                     try {
                         const oldImageRef = ref(storage, profileImage);
                         await deleteObject(oldImageRef);
@@ -312,7 +312,7 @@ function EditProfile({ show, onHide }) {
                                         alt="Profile Preview"
                                         className="profile-upload-preview"
                                         roundedCircle
-                                        onError={(e) => { e.target.onerror = null; e.target.src = defaultProfileImagePlaceholder; }}
+                                        onError={(e) => { e.target.onerror = null; e.target.src = defaultProfileImagePlaceholder; }} // Corrected reference here
                                     />
                                     <Form.Control
                                         type="file"
