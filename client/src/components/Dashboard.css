@@ -1,0 +1,805 @@
+/* Custom CSS for Dashboard.jsx */
+
+/* General Body and Font Styles */
+body {
+    font-family: 'Garamon', sans-serif;
+    /* Modern sans-serif for body text */
+    color: #4a5568;
+    /* Darker gray for general text */
+    background-color: #f8f4ed;
+    /* Light brown background */
+}
+
+/* Headings and Titles - Merriweather is more elegant for display */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.custom-title {
+    font-family: 'Merriweather', serif;
+    color: #f0e9e4;
+    /* Dark brown for headings */
+}
+
+/* Dashboard Layout */
+.dashboard-layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* Sidebar Styling - Modern & Clean UI/UX */
+.sidebar {
+    width: 280px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--brown-900);
+    /* Use a darker, more defined brown from the palette */
+    color: #e0d9c8;
+    /* Lighter, softer text color for better contrast */
+    transition: all 0.3s ease-in-out;
+    box-shadow: 4px 0 12px rgba(0, 0, 0, 0.15);
+    /* Adds depth and separation from the main content */
+    z-index: 1000;
+}
+
+.sidebar-header {
+    padding: 2.5rem 2rem 1.5rem;
+    /* Increased padding for a more spacious, elegant header */
+    background-color: transparent;
+    /* Keep the header background consistent with the sidebar */
+}
+
+.sidebar-header h1 {
+    color: white !important;
+    /* This line makes the 'Bookends' text white */
+    font-size: 1.8rem;
+    /* Larger, more prominent title */
+    margin-bottom: 0.5rem;
+    /* Space between the title and subtitle */
+}
+
+.sidebar-header .subtitle {
+    color: rgba(255, 255, 255, 0.7);
+    /* A translucent white for a subtle, elegant look */
+    font-size: 0.9rem;
+    font-style: italic;
+    /* Differentiates the subtitle from the main title */
+}
+
+.sidebar-nav {
+    flex-grow: 1;
+    padding: 0 1rem;
+    /* Horizontal padding to align with other elements */
+}
+
+.sidebar-list-group {
+    background-color: transparent;
+}
+
+.sidebar-list-item {
+    background-color: transparent;
+    border: none;
+    color: #e0d9c8;
+    /* Inactive text color */
+    font-size: 1rem;
+    font-weight: 500;
+    /* Slightly less bold for inactive items */
+    padding: 14px 20px;
+    transition: all 0.2s ease-in-out, transform 0.2s ease-in-out;
+    display: flex;
+    align-items: center;
+    border-radius: 8px;
+    margin: 8px 0;
+    /* Increased vertical spacing between items */
+}
+
+.sidebar-list-item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    /* Subtle hover effect for a touch of light */
+    color: #fff;
+    transform: translateX(5px);
+    /* Gentle slide effect */
+    box-shadow: inset 3px 0 0 var(--gold);
+    /* Thin gold line on the left for a modern touch */
+}
+
+.sidebar-list-item.active {
+    background-color: var(--saddle-brown);
+    /* A more distinct brown for the active item */
+    font-weight: bold;
+    color: white;
+    /* Active item text color */
+    transform: translateX(5px);
+    /* Maintain the slide effect for the active item */
+    box-shadow: inset 3px 0 0 var(--gold);
+    /* Consistent gold line on the left */
+}
+
+.sidebar-list-item .svg-inline--fa {
+    font-size: 1.25rem;
+    /* Slightly larger icons for better visibility */
+    width: 30px;
+    /* Increased width for icon alignment */
+    text-align: center;
+    margin-right: 1.25rem;
+    /* Increased spacing between icon and text */
+}
+
+.sidebar-footer {
+    background-color: var(--brown-900);
+    padding: 1.5rem;
+    /* More padding for a balanced look */
+    text-align: center;
+}
+
+/* Logout/Login Buttons in Sidebar */
+.custom-button-logout,
+.custom-button-login {
+    border-color: #e0d9c8;
+    color: #e0d9c8;
+    font-weight: 600;
+}
+
+.custom-button-logout:hover,
+.custom-button-login:hover {
+    background-color: #e0d9c8;
+    color: #5a4434;
+}
+
+/* Main Content Area */
+.main-content {
+    flex-grow: 1;
+    padding: 2rem;
+    overflow-y: auto;
+    /* Enable scrolling for content */
+}
+
+/* Color Palette Variables (for consistency) */
+:root {
+    --brown-900: #4a382e;
+    --brown-800: #5a4434;
+    --brown-700: #7b6a5a;
+    --brown-500: #a08b7d;
+    --light-brown-100: #f8f4ed;
+    --light-brown-50: #fdfbf5;
+    --border-color-light: #d4c7b8;
+    --border-color-lighter: #e0d9c8;
+    --gold: #FFD700;
+    --saddle-brown: #8B4513;
+    --sienna: #A0522D;
+}
+
+/* General Container and Text Styles - using CSS variables */
+.bg-light-brown-100 {
+    background-color: var(--light-brown-100);
+}
+
+.text-brown-800 {
+    color: var(--brown-800);
+}
+
+.text-brown-900 {
+    color: var(--brown-900);
+}
+
+.text-gray-700 {
+    color: #4a5568;
+}
+
+.text-gray-600 {
+    color: #718096;
+}
+
+.bg-light-brown-50 {
+    background-color: var(--light-brown-50);
+}
+
+.border-light-brown {
+    border-color: var(--border-color-light);
+}
+
+.border-light-brown-100 {
+    border-color: var(--border-color-lighter);
+}
+
+.text-yellow-500 {
+    color: var(--gold);
+}
+
+/* For star icons */
+
+/* Card Styling */
+.card {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    transition: all 0.3s ease-in-out;
+    background-color: #ffffff;
+    /* White background for cards */
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+/* Animated Cards/Items - for subtle entry animations */
+.animated-card,
+.animated-item {
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fadeInUp 0.5s ease-out forwards;
+}
+
+/* Specific animation delays for staggered effect */
+.animated-card:nth-child(1) {
+    animation-delay: 0.1s;
+}
+
+.animated-card:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.animated-card:nth-child(3) {
+    animation-delay: 0.3s;
+}
+
+.animated-item:nth-child(1) {
+    animation-delay: 0.1s;
+}
+
+.animated-item:nth-child(2) {
+    animation-delay: 0.15s;
+}
+
+.animated-item:nth-child(3) {
+    animation-delay: 0.2s;
+}
+
+.animated-item:nth-child(4) {
+    animation-delay: 0.25s;
+}
+
+.animated-item:nth-child(5) {
+    animation-delay: 0.3s;
+}
+
+/* Add more :nth-child delays as needed for longer lists */
+
+@keyframes fadeInUp {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Book List Grid */
+.book-list-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+/* Book Carousel for Discover Books */
+.book-carousel {
+    display: flex;
+    /* Ensure flex behavior for horizontal scroll */
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    /* Enable horizontal scrolling */
+    -webkit-overflow-scrolling: touch;
+    /* Smooth scrolling on iOS */
+    padding-bottom: 10px;
+    /* Space for scrollbar */
+    scrollbar-width: thin;
+    /* Firefox scrollbar */
+    scrollbar-color: var(--border-color-light) var(--light-brown-100);
+    /* Thumb and Track color */
+}
+
+.book-carousel::-webkit-scrollbar {
+    height: 8px;
+    /* Height of the scrollbar */
+}
+
+.book-carousel::-webkit-scrollbar-track {
+    background: var(--light-brown-100);
+    /* Color of the scrollbar track */
+    border-radius: 10px;
+}
+
+.book-carousel::-webkit-scrollbar-thumb {
+    background-color: var(--border-color-light);
+    /* Color of the scrollbar thumb */
+    border-radius: 10px;
+    border: 2px solid var(--light-brown-100);
+    /* Border around the thumb */
+}
+
+/* Individual Book Card Styling */
+.book-card {
+    border: 1px solid var(--border-color-lighter);
+    background-color: #ffffff;
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.book-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.book-cover {
+    border: 1px solid var(--border-color-light);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.custom-title {
+    font-family: 'Merriweather', serif;
+    color: var(--brown-800);
+}
+
+.custom-author {
+    font-family: 'Lato', sans-serif;
+}
+
+/* Status Badges */
+.custom-status-badge {
+    font-size: 0.75rem;
+    padding: 0.3em 0.6em;
+    font-weight: 600;
+}
+
+.custom-status-reading {
+    background-color: #5bc0de;
+    color: white;
+}
+
+/* Bootstrap info */
+.custom-status-finished {
+    background-color: #5cb85c;
+    color: white;
+}
+
+/* Bootstrap success */
+.custom-status-planned {
+    background-color: #f0ad4e;
+    color: white;
+}
+
+/* Bootstrap warning */
+
+/* Custom Progress Bar */
+.custom-progress-bar .progress-bar {
+    background-color: var(--brown-800);
+    /* Primary brown for progress */
+}
+
+.custom-border-top {
+    border-color: var(--border-color-lighter);
+}
+
+/* Custom Form Controls (Inputs, Selects) */
+.custom-input,
+.custom-select {
+    border-color: var(--border-color-light);
+    border-radius: 0.5rem;
+    /* More rounded */
+    padding: 0.65rem 1rem;
+    transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    font-family: 'Lato', sans-serif;
+    color: #4a5568;
+}
+
+.custom-input:focus,
+.custom-select:focus {
+    border-color: var(--saddle-brown);
+    /* SaddleBrown on focus */
+    box-shadow: 0 0 0 0.25rem rgba(139, 69, 19, 0.25);
+    outline: none;
+}
+
+/* Custom Input Group */
+.custom-input-group .form-control {
+    border-top-left-radius: 0.5rem;
+    border-bottom-left-radius: 0.5rem;
+    border-color: var(--border-color-light);
+}
+
+.custom-input-group .btn {
+    border-top-right-radius: 0.5rem;
+    border-bottom-right-radius: 0.5rem;
+}
+
+/* Custom Buttons */
+.custom-button-primary {
+    background-color: var(--saddle-brown);
+    /* SaddleBrown */
+    border-color: var(--saddle-brown);
+    color: white;
+    border-radius: 0.5rem;
+    padding: 0.65rem 1.25rem;
+    font-weight: 700;
+    transition: all 0.2s ease-in-out;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.custom-button-primary:hover {
+    background-color: var(--sienna);
+    /* Sienne */
+    border-color: var(--sienna);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.custom-button-primary:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.custom-button-primary-outline {
+    color: var(--saddle-brown);
+    border-color: var(--saddle-brown);
+    background-color: transparent;
+    border-radius: 0.5rem;
+    padding: 0.65rem 1.25rem;
+    font-weight: 700;
+    transition: all 0.2s ease-in-out;
+}
+
+.custom-button-primary-outline:hover {
+    background-color: var(--saddle-brown);
+    color: white;
+}
+
+.custom-button-secondary {
+    background-color: #a0a0a0;
+    border-color: #a0a0a0;
+    color: white;
+    border-radius: 0.5rem;
+    padding: 0.65rem 1.25rem;
+    font-weight: 600;
+    transition: all 0.2s ease-in-out;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.custom-button-secondary:hover {
+    background-color: #8b8b8b;
+    border-color: #8b8b8b;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.12);
+}
+
+.custom-button-danger {
+    background-color: #dc3545;
+    /* Bootstrap danger */
+    border-color: #dc3545;
+    color: white;
+    border-radius: 0.5rem;
+    padding: 0.65rem 1.25rem;
+    font-weight: 600;
+    transition: all 0.2s ease-in-out;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.custom-button-danger:hover {
+    background-color: #c82333;
+    border-color: #c82333;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.12);
+}
+
+.custom-button-sm {
+    font-size: 0.875rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 0.4rem;
+}
+
+.custom-button-outline {
+    border-radius: 0.4rem;
+}
+
+/* Tab Styles - Using Bootstrap Tabs with custom overrides */
+.custom-tabs.nav-tabs {
+    border-bottom: none;
+    /* Remove default bottom border */
+    margin-bottom: 0;
+    /* Remove default margin */
+}
+
+.custom-tabs .nav-item {
+    flex-grow: 1;
+    /* Distribute tabs evenly */
+    text-align: center;
+}
+
+.custom-tabs .nav-link {
+    color: var(--brown-800);
+    border: none;
+    background-color: var(--border-color-lighter);
+    border-radius: 0.75rem 0.75rem 0 0;
+    /* Rounded top corners */
+    padding: 0.75rem 0.5rem;
+    font-weight: bold;
+    transition: all 0.2s ease-in-out;
+    margin: 0 4px;
+    /* Space between tabs */
+    height: 100%;
+    /* Ensure consistent height */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.2;
+}
+
+.custom-tabs .nav-link.active {
+    background-color: var(--saddle-brown);
+    /* SaddleBrown for active tab */
+    color: white;
+    border-color: var(--saddle-brown);
+    font-weight: bolder;
+    transform: translateY(-3px);
+    /* Lift active tab slightly */
+    box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.custom-tabs .nav-link:hover:not(.active) {
+    background-color: var(--border-color-light);
+    color: var(--brown-900);
+    transform: translateY(-1px);
+}
+
+.custom-tabs .tab-content {
+    background-color: #ffffff;
+    border: 1px solid var(--border-color-light);
+    border-radius: 0 0 0.75rem 0.75rem;
+    /* Rounded bottom corners */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    padding: 2rem;
+    margin-top: -1px;
+    /* Overlap with tabs */
+}
+
+/* Modal Styling */
+.modal-header {
+    border-bottom: 1px solid var(--border-color-light);
+    background-color: var(--light-brown-100);
+}
+
+.modal-title {
+    color: var(--brown-800);
+    font-weight: bold;
+}
+
+.modal-body {
+    background-color: var(--light-brown-50);
+    color: var(--brown-800);
+}
+
+.modal-footer {
+    border-top: 1px solid var(--border-color-light);
+    background-color: var(--light-brown-100);
+}
+
+/* Custom Slider Styles - for rating input */
+.custom-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    /* Thicker track */
+    background: linear-gradient(to right, var(--gold) 0%, var(--gold) var(--value, 0%), var(--border-color-lighter) var(--value, 0%), var(--border-color-lighter) 100%);
+    outline: none;
+    opacity: 1;
+    transition: background 0.2s ease-in-out;
+    border-radius: 3px;
+}
+
+.custom-slider:hover {
+    opacity: 1;
+}
+
+.custom-slider::-webkit-slider-runnable-track {
+    height: 6px;
+    background: var(--border-color-lighter);
+    border-radius: 3px;
+    border: none;
+}
+
+.custom-slider::-moz-range-track {
+    height: 6px;
+    background: var(--border-color-lighter);
+    border-radius: 3px;
+    border: none;
+}
+
+.custom-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 28px;
+    /* Larger thumb */
+    height: 28px;
+    background: var(--gold);
+    cursor: grab;
+    border-radius: 50%;
+    margin-top: -11px;
+    /* Adjust to center vertically */
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+    border: 2px solid #b8860b;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23FFFFFF'%3E%3Cpath d='M12 .587l3.668 7.425 8.219 1.192-5.942 5.797 1.403 8.182-7.348-3.864-7.348 3.864 1.403-8.182-5.942-5.797 8.219-1.192z'/%3E%3C/svg%3E");
+    background-size: 70%;
+    background-repeat: no-repeat;
+    background-position: center;
+    transition: background-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+
+.custom-slider::-webkit-slider-thumb:active {
+    transform: scale(1.15);
+    cursor: grabbing;
+}
+
+.custom-slider::-moz-range-thumb {
+    width: 28px;
+    height: 28px;
+    background: var(--gold);
+    cursor: grab;
+    border-radius: 50%;
+    border: 2px solid #b8860b;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23FFFFFF'%3E%3Cpath d='M12 .587l3.668 7.425 8.219 1.192-5.942 5.797 1.403 8.182-7.348-3.864-7.348 3.864 1.403-8.182-5.942-5.797 8.219-1.192z'/%3E%3C/svg%3E");
+    background-size: 70%;
+    background-repeat: no-repeat;
+    background-position: center;
+    transition: background-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+
+.custom-slider::-moz-range-thumb:active {
+    transform: scale(1.15);
+    cursor: grabbing;
+}
+
+/* Custom List Group for Statistics Section */
+.list-group-custom .list-group-item {
+    border-color: #f0ede8;
+    background-color: transparent;
+    padding-left: 0;
+    padding-right: 0;
+    font-family: 'Lato', sans-serif;
+}
+
+/* Custom Bullet Points for Lists */
+.list-group-custom-bullet {
+    list-style-type: '📖 ';
+    /* Custom bullet point using emoji */
+    padding-left: 1.5rem;
+    font-family: 'Lato', sans-serif;
+}
+
+.list-group-custom-bullet li {
+    margin-bottom: 0.5rem;
+}
+
+/* Hover Effects */
+.hover-scale:hover {
+    transform: scale(1.02);
+}
+
+.hover-underline:hover {
+    text-decoration: underline;
+}
+
+.recommendation-reason {
+    border-top: 1px dashed var(--border-color-lighter);
+    padding-top: 0.75rem;
+    margin-top: 1rem;
+    color: var(--brown-700);
+    font-style: italic;
+    font-size: 0.85rem;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .dashboard-layout {
+        flex-direction: column;
+    }
+
+    .sidebar {
+        width: 100%;
+        height: auto;
+        flex-direction: row;
+        /* Horizontal sidebar on small screens */
+        overflow-x: auto;
+        /* Allow horizontal scrolling for tabs */
+        -webkit-overflow-scrolling: touch;
+        /* Smooth scrolling on iOS */
+        padding: 0;
+        border-bottom: 1px solid var(--brown-900);
+    }
+
+    .sidebar-header {
+        display: none;
+        /* Hide header on small screens */
+    }
+
+    .sidebar-nav {
+        width: 100%;
+    }
+
+    .sidebar-list-group {
+        display: flex;
+        /* Make items horizontal */
+        flex-direction: row;
+        justify-content: space-around;
+        padding: 0.5rem 0;
+    }
+
+    .sidebar-list-item {
+        margin: 0 5px;
+        padding: 8px 10px;
+        font-size: 0.9rem;
+        border-radius: 5px;
+        flex-grow: 1;
+        /* Distribute space */
+        text-align: center;
+        white-space: nowrap;
+        /* Prevent text wrapping */
+        flex-direction: column;
+        /* Icon and text stacked */
+    }
+
+    .sidebar-list-item .svg-inline--fa {
+        margin-right: 0 !important;
+        /* Remove margin from icon */
+        margin-bottom: 5px;
+        /* Space between icon and text */
+    }
+
+    .sidebar-list-item:hover,
+    .sidebar-list-item.active {
+        transform: none;
+        /* No transform on hover for horizontal layout */
+        box-shadow: none;
+        background-color: var(--brown-700);
+    }
+
+    .sidebar-footer {
+        display: none;
+        /* Hide footer on small screens to save space */
+    }
+
+    .main-content {
+        padding: 1rem;
+    }
+
+    .custom-tabs .nav-link {
+        padding: 0.5rem 0.25rem;
+        font-size: 0.9rem;
+        margin: 0 2px;
+    }
+
+    .book-list-grid {
+        grid-template-columns: 1fr;
+        /* Single column on small screens */
+    }
+
+    .book-carousel .card {
+        width: 180px !important;
+        /* Adjust width for carousel cards */
+    }
+}
+
+@media (min-width: 769px) and (max-width: 1200px) {
+    .sidebar {
+        width: 220px;
+        /* Slightly narrower sidebar for tablets */
+    }
+
+    .main-content {
+        padding: 1.5rem;
+    }
+
+    .book-list-grid {
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    }
+}

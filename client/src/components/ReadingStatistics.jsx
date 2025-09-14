@@ -1,357 +1,199 @@
-// client/src/components/ReadingStatistics.jsx
+import { ArcElement, BarElement, CategoryScale, Chart as ChartJS, Legend, LinearScale, Title, Tooltip } from 'chart.js';
+import { useMemo } from 'react';
+import { Card, Col, ListGroup, Row } from 'react-bootstrap';
+import { Bar, Doughnut } from 'react-chartjs-2';
 
-import React from 'react';
-import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Text, Tooltip, XAxis, YAxis } from 'recharts'; // Added Text import
+const EmptyState = ({ message = "No items found.", details = "Try adjusting your filters or adding new data." }) => (
+    <div className="text-center my-5 text-muted">
+        <p className="mb-0 text-xl font-semibold">{message}</p>
+        <p className="text-sm">{details}</p>
+    </div>
+);
 
-/**
- * ReadingStatistics Component
- *
- * This component displays various reading statistics such as:
- * - Total words read
- * - Books completed
- * - Average reading speed
- * - Time spent reading
- * - Total books in list
- * - Books by status (Planned, Reading, Finished)
- * - Most common genre
- * - Most common author
- * - Average rating of finished books
- * - Average pages per finished book
- *
- * It also includes new charts for:
- * - Most Read Authors (Bar Chart)
- * - Reading Streak (Custom Visualization/Pie Chart for demonstration)
- *
- * It takes 'stats' as a prop, which is an object containing the reading statistics.
- * The 'stats' object is expected to have the following structure:
- * {
- * totalWordsRead: number,
- * booksCompleted: number,
- * averageReadingSpeed: number, // words per minute (WPM)
- * timeSpentReading: number,    // in hours
- * totalBooksInList: number,
- * mostCommonGenre: string,
- * mostCommonAuthor: string,
- * averageRating: number,
- * averagePagesPerFinishedBook: number,
- * genreCounts: object, // NEW: for potential future genre chart
- * authorCounts: object, // NEW: Used for Most Read Authors chart
- * booksByStatus: { 'Planned': number, 'Reading': number, 'Finished': number }
- * }
- */
-const ReadingStatistics = ({ stats }) => {
-    // Destructure the stats object for easier access
-    const {
-        totalWordsRead,
-        booksCompleted,
-        averageReadingSpeed,
-        timeSpentReading,
-        totalBooksInList,
-        mostCommonGenre,
-        mostCommonAuthor,
-        averageRating,
-        averagePagesPerFinishedBook,
-        authorCounts, // Now using this for the chart
-        booksByStatus
-    } = stats;
+// We register the required chart components here
+ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend, Title);
 
-    // Data for the numerical statistic cards
-    const statItems = [
-        {
-            label: "Total Words Read",
-            value: totalWordsRead ? totalWordsRead.toLocaleString() : 'N/A',
-            icon: "✍", // Pen
-            color: "bg-gradient-to-br from-blue-700 to-blue-900",
-            iconColor: "text-blue-300"
-        },
-        {
-            label: "Books Completed",
-            value: booksCompleted !== undefined ? booksCompleted : 'N/A',
-            icon: "✅", // Checkmark
-            color: "bg-gradient-to-br from-emerald-700 to-emerald-900",
-            iconColor: "text-emerald-300"
-        },
-        {
-            label: "Avg. Reading Speed (WPM)",
-            value: averageReadingSpeed ? averageReadingSpeed.toFixed(0) : 'N/A',
-            icon: "⏱", // Stopwatch
-            color: "bg-gradient-to-br from-purple-700 to-purple-900",
-            iconColor: "text-purple-300"
-        },
-        {
-            label: "Time Spent Reading (Hours)",
-            value: timeSpentReading ? timeSpentReading.toFixed(1) : 'N/A',
-            icon: "⏳", // Hourglass
-            color: "bg-gradient-to-br from-yellow-700 to-yellow-900",
-            iconColor: "text-yellow-300"
-        },
-        {
-            label: "Total Books in List",
-            value: totalBooksInList !== undefined ? totalBooksInList : 'N/A',
-            icon: "📚", // Stack of books
-            color: "bg-gradient-to-br from-red-700 to-red-900",
-            iconColor: "text-red-300"
-        },
-        {
-            label: "Most Common Genre",
-            value: mostCommonGenre || 'N/A',
-            icon: "🎭", // Theatre masks
-            color: "bg-gradient-to-br from-indigo-700 to-indigo-900",
-            iconColor: "text-indigo-300"
-        },
-        {
-            label: "Most Common Author",
-            value: mostCommonAuthor || 'N/A',
-            icon: "✒️", // Nib pen
-            color: "bg-gradient-to-br from-pink-700 to-pink-900",
-            iconColor: "text-pink-300"
-        },
-        {
-            label: "Average Rating",
-            value: averageRating !== undefined && averageRating !== null ? `${averageRating}/5` : 'N/A',
-            icon: "🌟", // Sparkling star
-            color: "bg-gradient-to-br from-teal-700 to-teal-900",
-            iconColor: "text-teal-300"
-        },
-        {
-            label: "Avg. Pages/Finished Book",
-            value: averagePagesPerFinishedBook !== undefined ? averagePagesPerFinishedBook : 'N/A',
-            icon: "📈", // Chart increasing
-            color: "bg-gradient-to-br from-orange-700 to-orange-900",
-            iconColor: "text-orange-300"
-        },
-    ];
+const ReadingStatistics = ({ stats, myBooks }) => {
 
-    // Prepare data for Most Read Authors chart
-    const authorChartData = authorCounts
-        ? Object.entries(authorCounts)
-            .map(([name, count]) => ({ name, books: count }))
-            .sort((a, b) => b.books - a.books)
-            .slice(0, 5) // Top 5 authors
-        : [];
+    // Helper function to get top items from a count object
+    const getTopItems = (counts, num = 3) => {
+        // Use a fallback to an empty object to prevent errors
+        const safeCounts = counts || {};
+        return Object.entries(safeCounts)
+            .sort(([, countA], [, countB]) => countB - countA)
+            .slice(0, num);
+    };
 
-    // Minimalistic color palette for the bar chart
-    const AUTHOR_BAR_COLORS = ['#8892B0', '#6C728E', '#505672', '#343B57', '#1A2038']; // Shades of muted blue/gray
+    // Memoize chart data to prevent re-calculations and to ensure hooks are called unconditionally
+    const statusChartData = useMemo(() => ({
+        labels: Object.keys(stats?.booksByStatus || {}),
+        datasets: [{
+            label: 'Books by Status',
+            data: Object.values(stats?.booksByStatus || {}),
+            backgroundColor: [
+                'rgba(242, 185, 114, 0.8)',
+                'rgba(141, 196, 219, 0.8)',
+                'rgba(139, 195, 74, 0.8)'
+            ],
+            borderColor: [
+                'rgba(242, 185, 114, 1)',
+                'rgba(141, 196, 219, 1)',
+                'rgba(139, 195, 74, 1)'
+            ],
+            borderWidth: 1,
+        }],
+    }), [stats]);
 
-    // Placeholder data for Reading Streak (since actual streak logic isn't available)
-    const totalMilestoneDays = 10; // Define a milestone for the streak visualization
-    const currentStreakDays = 7; // Example: 7 days
-    const remainingDays = totalMilestoneDays - currentStreakDays;
+    const booksReadPerMonth = useMemo(() => {
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const monthlyData = new Array(12).fill(0);
+        Object.entries(stats?.booksReadPerMonth || {}).forEach(([monthYear, count]) => {
+            const month = parseInt(monthYear.split('-')[1]) - 1;
+            monthlyData[month] = count;
+        });
 
-    // Data for the streak Pie chart
-    const streakPieData = [
-        { name: 'Current Streak', value: currentStreakDays },
-        { name: 'Remaining', value: remainingDays > 0 ? remainingDays : 0 },
-    ];
-    // Minimalistic color palette for the pie chart
-    const STREAK_PIE_COLORS = ['#00C9B1', '#303A60']; // Bright teal for progress, dark blue for background
+        return {
+            labels: months,
+            datasets: [{
+                label: 'Books Finished',
+                data: monthlyData,
+                backgroundColor: 'rgba(90, 68, 52, 0.8)',
+                borderColor: 'rgba(90, 68, 52, 1)',
+                borderWidth: 1,
+            }],
+        };
+    }, [stats]);
+
+    const pagesReadOverTime = useMemo(() => {
+        const cumulativeData = (stats?.pagesReadOverTime || []).reduce((acc, current) => {
+            const lastTotal = acc.length > 0 ? acc[acc.length - 1].pages : 0;
+            acc.push({
+                date: new Date(current.date.seconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                pages: lastTotal + current.pages,
+            });
+            return acc;
+        }, []);
+
+        return {
+            labels: cumulativeData.map(item => item.date),
+            datasets: [{
+                label: 'Cumulative Pages Read',
+                data: cumulativeData.map(item => item.pages),
+                backgroundColor: 'rgba(175, 137, 107, 0.8)',
+                borderColor: 'rgba(175, 137, 107, 1)',
+                borderWidth: 1,
+            }],
+        };
+    }, [stats]);
+
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'top',
+            },
+            title: {
+                display: false,
+            },
+        },
+    };
+
+    // All hooks and data transformations are now handled.
+    // We can now safely use the data to render the component.
+    const topGenres = getTopItems(stats?.genreCounts);
+    const topAuthors = getTopItems(stats?.authorCounts);
+
+    if (!stats || Object.keys(stats).length === 0) {
+        return (
+            <Card className="animated-item p-4 border-0">
+                <h2 className="custom-title mb-4">Your Reading Statistics</h2>
+                <EmptyState message="No data available yet." details="Please add some books to your list to see your statistics." />
+            </Card>
+        );
+    }
 
     return (
-        <div className="bg-gradient-to-br from-gray-900 to-slate-800 p-8 rounded-3xl shadow-2xl max-w-6xl mx-auto my-12 font-sans text-gray-200 border-4 border-slate-700">
-            <h2 className="text-5xl font-extrabold text-center mb-12 tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-teal-300 to-cyan-500 drop-shadow-lg animate-pulse-text">
-                Your Dynamic Reading Insights
-            </h2>
-
-            {/* Main Statistics Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6 mb-12">
-                {statItems.map((item, index) => (
-                    <div
-                        key={index}
-                        className={`flex flex-col items-center p-6 ${item.color} rounded-xl shadow-lg transition-all duration-300 ease-in-out transform hover:-translate-y-2 hover:shadow-xl relative overflow-hidden group border border-transparent hover:border-blue-400`}
-                        style={{ animation: `fadeInSlideUp 0.6s ease-out ${index * 0.08}s forwards` }}
-                    >
-                        <div className="absolute inset-0 bg-white opacity-5 rounded-xl animate-subtle-glow"></div>
-                        <span className={`text-5xl mb-3 z-10 ${item.iconColor}`}>{item.icon}</span>
-                        <p className="text-sm font-semibold text-gray-300 mb-1 tracking-wide uppercase z-10">{item.label}</p>
-                        <p className="text-3xl font-black text-gray-100 z-10">{item.value}</p>
-                    </div>
-                ))}
-            </div>
-
-            {/* Charts Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-12 p-8 bg-gray-800 rounded-3xl shadow-inset-xl border border-indigo-600">
-                {/* Most Read Authors Chart */}
-                <div className="p-8 bg-slate-700 rounded-2xl shadow-xl border border-slate-600 transform hover:scale-[1.02] transition-transform duration-300">
-                    <h3 className="text-3xl font-bold text-gray-100 mb-6 text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-green-300">Top Authors by Books Read</h3>
-                    {authorChartData.length > 0 ? (
-                        <ResponsiveContainer width="100%" height={300}>
-                            <BarChart
-                                data={authorChartData}
-                                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                            >
-                                <CartesianGrid strokeDasharray="2 2" stroke="#333" vertical={false} /> {/* Lighter, dashed grid, no vertical */}
-                                <XAxis dataKey="name" stroke="#a0a0a0" tickLine={false} axisLine={{ stroke: "#666" }} style={{ fontSize: '0.85em' }} />
-                                <YAxis stroke="#a0a0a0" tickLine={false} axisLine={{ stroke: "#666" }} />
-                                <Tooltip
-                                    cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                                    contentStyle={{ backgroundColor: '#2d3748', border: '1px solid #4a5568', borderRadius: '8px', padding: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.3)', color: '#cbd5e0' }}
-                                    labelStyle={{ color: '#e2e8f0', fontWeight: 'bold', fontSize: '1em' }}
-                                    itemStyle={{ color: '#a0aec0' }}
-                                />
-                                <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '0.8em', color: '#a0a0a0' }} />
-                                <Bar dataKey="books" name="Books Read" radius={[8, 8, 0, 0]} barSize={25}> {/* Slightly smaller radius and bar size */}
-                                    {authorChartData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={AUTHOR_BAR_COLORS[index % AUTHOR_BAR_COLORS.length]} />
-                                    ))}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
-                    ) : (
-                        <p className="text-center text-gray-400 italic mt-8 p-4 bg-slate-800 rounded-lg">
-                            No author data available. Add more books to your list to see your favorite authors!
-                        </p>
-                    )}
-                </div>
-
-                {/* Reading Streak Chart/Visualization */}
-                <div className="p-8 bg-slate-700 rounded-2xl shadow-xl border border-slate-600 flex flex-col items-center justify-center transform hover:scale-[1.02] transition-transform duration-300">
-                    <h3 className="text-3xl font-bold text-gray-100 mb-6 text-center text-transparent bg-clip-text bg-gradient-to-r from-orange-300 to-red-300">Your Reading Streak</h3>
-                    {currentStreakDays > 0 ? ( // Use currentStreakDays for conditional rendering
-                        <>
-                            <ResponsiveContainer width="100%" height={250}>
-                                <PieChart>
-                                    {/* Background Pie for the full circle track */}
-                                    <Pie
-                                        data={[{ name: 'Total Milestone', value: totalMilestoneDays }]}
-                                        cx="50%"
-                                        cy="50%"
-                                        outerRadius={100}
-                                        fill="#3F4756" // Darker background color for the circle
-                                        dataKey="value"
-                                        isAnimationActive={false} // No animation for background
-                                        stroke="none"
-                                    />
-                                    {/* Progress Pie for the current streak */}
-                                    <Pie
-                                        data={streakPieData}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={80} // Inner radius of the progress circle (makes it a donut)
-                                        outerRadius={100} // Outer radius same as background
-                                        startAngle={90} // Start from the top
-                                        endAngle={90 - (currentStreakDays / totalMilestoneDays) * 360} // Calculate end angle based on progress
-                                        paddingAngle={0} // No padding between progress and background
-                                        dataKey="value"
-                                        isAnimationActive={true}
-                                        animationDuration={1500} // Smooth animation
-                                        stroke="none" // No stroke for clean look
-                                        cornerRadius={5} // Slightly rounded ends for the arc
-                                    >
-                                        {streakPieData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={STREAK_PIE_COLORS[index % STREAK_PIE_COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    {/* Custom Text for the streak count in the center */}
-                                    <Text
-                                        x="50%"
-                                        y="50%"
-                                        textAnchor="middle"
-                                        dominantBaseline="middle"
-                                        className="font-extrabold text-5xl"
-                                        fill="#E2E8F0" // Light gray color for the number
-                                    >
-                                        {currentStreakDays}
-                                    </Text>
-                                    <Tooltip
-                                        cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                                        contentStyle={{ backgroundColor: '#2d3748', border: '1px solid #4a5568', borderRadius: '8px', padding: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.3)', color: '#cbd5e0' }}
-                                        labelStyle={{ color: '#e2e8f0', fontWeight: 'bold', fontSize: '1em' }}
-                                        itemStyle={{ color: '#a0aec0' }}
-                                    />
-                                    {/* Legend for streak pie chart - can be optionally removed for ultra-minimalism */}
-                                    <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '0.8em', color: '#a0a0a0' }} />
-                                </PieChart>
-                            </ResponsiveContainer>
-                            <p className="text-xl font-medium text-gray-300 mt-4">
-                                Your current streak: <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-orange-400">{currentStreakDays} days</span>
-                            </p>
-                            {remainingDays > 0 ? (
-                                <p className="text-md text-gray-400 mt-1">
-                                    Only <span className="text-teal-300 font-semibold">{remainingDays} more days</span> to reach your {totalMilestoneDays}-day milestone!
-                                </p>
-                            ) : (
-                                <p className="text-md text-gray-400 mt-1">
-                                    You've reached your {totalMilestoneDays}-day milestone! Excellent!
-                                </p>
-                            )}
-                        </>
-                    ) : (
-                        <p className="text-center text-gray-400 italic mt-8 p-4 bg-slate-800 rounded-lg">
-                            No active reading streak. Start reading today to build one!
-                        </p>
-                    )}
-                </div>
-            </div>
-
-            {/* Books by Status */}
-            {booksByStatus && Object.keys(booksByStatus).length > 0 && (
-                <div className="mt-12 p-10 bg-gray-800 rounded-2xl shadow-xl border border-gray-700">
-                    <h3 className="text-3xl font-bold text-gray-100 mb-8 text-center">Books by Status</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                        {Object.entries(booksByStatus).map(([status, count]) => (
-                            <div
-                                key={status}
-                                className="flex flex-col items-center p-6 bg-slate-700 rounded-xl shadow-md border border-slate-600 transform hover:scale-105 transition-transform duration-300 group"
-                            >
-                                <p className="text-base font-semibold text-gray-300 mb-2 group-hover:text-purple-400 transition-colors">{status}</p>
-                                <p className="text-4xl font-bold text-gray-100 group-hover:text-pink-400 transition-colors">{count}</p>
+        <Card className="animated-item p-4 border-0">
+            <h2 className="custom-title mb-4">Your Reading Statistics</h2>
+            <Row className="g-4 mb-4">
+                <Col md={12} lg={4}>
+                    <Card className="h-100 shadow-sm border-light-brown-100 animated-item">
+                        <Card.Body>
+                            <Card.Subtitle className="mb-3 text-2xl font-semibold text-brown-800">Books by Status</Card.Subtitle>
+                            <div style={{ height: '250px' }}>
+                                {Object.values(stats.booksByStatus).some(count => count > 0) ? (
+                                    <Doughnut data={statusChartData} />
+                                ) : (
+                                    <EmptyState message="No books in your list yet." details="Add some books to get started!" />
+                                )}
                             </div>
-                        ))}
-                    </div>
-                </div>
-            )}
+                        </Card.Body>
+                    </Card>
+                </Col>
+                <Col md={6} lg={4}>
+                    <Card className="h-100 shadow-sm border-light-brown-100 animated-item">
+                        <Card.Body>
+                            <Card.Subtitle className="mb-3 text-2xl font-semibold text-brown-800">Top Genres</Card.Subtitle>
+                            <ListGroup variant="flush">
+                                {topGenres.length > 0 ? topGenres.map(([genre, count], index) => (
+                                    <ListGroup.Item key={index} className="d-flex justify-content-between align-items-center bg-transparent border-0 px-0">
+                                        <span>{genre}</span>
+                                        <span className="badge bg-light-brown-500 rounded-pill">{count}</span>
+                                    </ListGroup.Item>
+                                )) : <EmptyState message="No genres read yet." details="Finish a book to see your top genres!" />}
+                            </ListGroup>
+                        </Card.Body>
+                    </Card>
+                </Col>
+                <Col md={6} lg={4}>
+                    <Card className="h-100 shadow-sm border-light-brown-100 animated-item">
+                        <Card.Body>
+                            <Card.Subtitle className="mb-3 text-2xl font-semibold text-brown-800">Top Authors</Card.Subtitle>
+                            <ListGroup variant="flush">
+                                {topAuthors.length > 0 ? topAuthors.map(([author, count], index) => (
+                                    <ListGroup.Item key={index} className="d-flex justify-content-between align-items-center bg-transparent border-0 px-0">
+                                        <span>{author}</span>
+                                        <span className="badge bg-light-brown-500 rounded-pill">{count}</span>
+                                    </ListGroup.Item>
+                                )) : <EmptyState message="No authors read yet." details="Finish a book to see your top authors!" />}
+                            </ListGroup>
+                        </Card.Body>
+                    </Card>
+                </Col>
+            </Row>
 
-            {/* Message for no data */}
-            {!totalWordsRead && !booksCompleted && !averageReadingSpeed && !timeSpentReading && !totalBooksInList && (
-                <p className="text-center text-gray-400 mt-12 p-6 bg-gray-800 rounded-xl shadow-md border border-gray-700 italic font-medium">
-                    No reading statistics available yet. Start your literary adventure!
-                </p>
-            )}
-
-            {/* Keyframes for animations */}
-            <style>
-                {`
-          .font-sans {
-            font-family: 'Inter', sans-serif; /* Ensuring Inter is used */
-          }
-
-          @keyframes fadeInSlideUp {
-            from {
-              opacity: 0;
-              transform: translateY(30px);
-            }
-            to {
-              opacity: 1;
-              transform: translateY(0);
-            }
-          }
-
-          @keyframes subtle-glow {
-            0% { opacity: 0.05; }
-            50% { opacity: 0.15; }
-            100% { opacity: 0.05; }
-          }
-
-          .animate-subtle-glow {
-            animation: subtle-glow 4s infinite ease-in-out;
-          }
-
-          @keyframes pulse-text {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.02); }
-            100% { transform: scale(1); }
-          }
-          .animate-pulse-text {
-            animation: pulse-text 2s infinite ease-in-out;
-          }
-
-          /* Inset shadow for chart container */
-          .shadow-inset-xl {
-            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.2);
-          }
-        `}
-            </style>
-        </div>
+            <Row className="g-4">
+                <Col md={12} lg={6}>
+                    <Card className="h-100 shadow-sm border-light-brown-100 animated-item">
+                        <Card.Body>
+                            <Card.Subtitle className="mb-3 text-2xl font-semibold text-brown-800">Books Read Per Month</Card.Subtitle>
+                            <div style={{ height: '300px' }}>
+                                {booksReadPerMonth.labels.length > 0 ? (
+                                    <Bar data={booksReadPerMonth} options={chartOptions} />
+                                ) : (
+                                    <EmptyState message="No books finished yet." details="Finish some books to see this chart!" />
+                                )}
+                            </div>
+                        </Card.Body>
+                    </Card>
+                </Col>
+                <Col md={12} lg={6}>
+                    <Card className="h-100 shadow-sm border-light-brown-100 animated-item">
+                        <Card.Body>
+                            <Card.Subtitle className="mb-3 text-2xl font-semibold text-brown-800">Cumulative Pages Read</Card.Subtitle>
+                            <div style={{ height: '300px' }}>
+                                {pagesReadOverTime.labels.length > 0 ? (
+                                    <Bar data={pagesReadOverTime} options={chartOptions} />
+                                ) : (
+                                    <EmptyState message="No pages read yet." details="Start reading or finish a book to see your progress!" />
+                                )}
+                            </div>
+                        </Card.Body>
+                    </Card>
+                </Col>
+            </Row>
+        </Card>
     );
 };
 

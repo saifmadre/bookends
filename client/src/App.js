@@ -13,35 +13,34 @@ import { ToastProvider } from './contexts/ToastContext';
 
 // Components
 import AdminDashboard from './components/AdminDashboard.jsx';
-import BookList from './components/BookList';
-import ChangePassword from './components/ChangePassword.jsx';
+import ChangePassword from './components/ChangePassword.jsx'; // <--- ADDED THIS IMPORT
 import Dashboard from './components/Dashboard.jsx';
-import DeleteAccount from './components/DeleteAccount.jsx';
+import DeleteAccount from './components/DeleteAccount.jsx'; // <--- ADDED THIS IMPORT
 import Login from './components/login.jsx';
 import NotFoundPage from './components/NotFoundPage.jsx';
-import Profile from './components/Profile.jsx';
 import Register from './components/register.jsx';
 import ResetPassword from './components/ResetPassword.jsx';
-import UsersPage from './components/UsersPage.jsx';
 
 // ProtectedRoute Component: Wraps routes that require authentication
-const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+const ProtectedRoute = ({ children, adminOnly = false }) => { // Added adminOnly prop
+  const { isAuthenticated, loading, user } = useAuth(); // Destructure user for role check
   const navigate = useNavigate();
-  const location = useLocation(); // Get current location
+  const location = useLocation();
 
   useEffect(() => {
-    console.log(`ProtectedRoute for path: ${location.pathname} - loading: ${loading}, isAuthenticated: ${isAuthenticated}`);
-    // If authentication is done loading AND user is NOT authenticated, redirect to login
-    if (!loading && !isAuthenticated) {
-      console.log(`ProtectedRoute: Not authenticated (loading: ${loading}, isAuthenticated: ${isAuthenticated}), redirecting to /login.`);
-      navigate('/login', { replace: true });
+    console.log(`ProtectedRoute for path: ${location.pathname} - loading: ${loading}, isAuthenticated: ${isAuthenticated}, user role: ${user?.role}`);
+    if (!loading) {
+      if (!isAuthenticated) {
+        console.log(`ProtectedRoute: Not authenticated, redirecting to /login.`);
+        navigate('/login', { replace: true });
+      } else if (adminOnly && user?.role !== 'admin') { // Check for admin role if adminOnly is true
+        console.log(`ProtectedRoute: User is not admin, redirecting to /dashboard.`);
+        navigate('/dashboard', { replace: true }); // Redirect non-admins from admin routes
+      }
     }
-  }, [isAuthenticated, loading, navigate, location.pathname]); // Added location.pathname to dependencies
+  }, [isAuthenticated, loading, navigate, location.pathname, adminOnly, user?.role]);
 
   if (loading) {
-    // Show a loading indicator while authentication status is being determined
-    console.log('ProtectedRoute: Authentication is still loading, rendering loading message.');
     return (
       <div className="book-theme-app d-flex align-items-center justify-content-center min-vh-100">
         <p className="book-form-text">Loading authentication status...</p>
@@ -49,17 +48,12 @@ const ProtectedRoute = ({ children }) => {
     );
   }
 
-  // If loading is false and isAuthenticated is true, render children
-  // If loading is false and isAuthenticated is false, the useEffect above will handle redirection
-  if (isAuthenticated) {
-    console.log('ProtectedRoute: Authenticated, rendering children.');
+  if (isAuthenticated && (!adminOnly || user?.role === 'admin')) {
+    console.log('ProtectedRoute: Authenticated and authorized, rendering children.');
     return children;
   }
 
-  // If not authenticated and not loading, we explicitly return null here
-  // because the useEffect already triggered the navigation. This prevents
-  // momentarily rendering the protected content before redirect.
-  console.log('ProtectedRoute: Not authenticated and not loading, returning null (redirect handled).');
+  console.log('ProtectedRoute: Not authorized or redirect handled, returning null.');
   return null;
 };
 
@@ -70,7 +64,7 @@ const RedirectToAuthPage = () => {
 
   useEffect(() => {
     console.log(`RedirectToAuthPage: Effect triggered. loading: ${loading}, isAuthenticated: ${isAuthenticated}`);
-    if (!loading) { // Once authentication state is determined
+    if (!loading) {
       if (isAuthenticated) {
         console.log('RedirectToAuthPage: Authenticated, redirecting to /dashboard.');
         navigate('/dashboard', { replace: true });
@@ -89,14 +83,13 @@ const RedirectToAuthPage = () => {
     );
   }
 
-  // This component handles redirection, so it doesn't render anything itself
   return null;
 };
 
 
 // AppContent Component: Contains the main layout and routes
 function AppContent() {
-  const { user, logout, loading, isAuthenticated } = useAuth();
+  const { user, logout, loading, isAuthenticated } = useAuth(); // Keep user for navbar display
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -128,29 +121,21 @@ function AppContent() {
           </button>
           <div className="collapse navbar-collapse" id="navbarNav">
             <ul className="navbar-nav me-auto mb-2 mb-lg-0">
-              {isAuthenticated ? ( // Use isAuthenticated here
+              {isAuthenticated ? (
                 <>
                   <li className="nav-item">
                     <Link to="/dashboard" className="nav-link custom-nav-link">
                       Dashboard
                     </Link>
                   </li>
-                  <li className="nav-item">
-                    <Link to="/users" className="nav-link custom-nav-link">
-                      Find Users
-                    </Link>
-                  </li>
-                  <li className="nav-item">
-                    <Link to="/profile" className="nav-link custom-nav-link">
-                      Profile
-                    </Link>
-                  </li>
-                  {/* Settings Dropdown */}
+                  {/* Removed direct links for /users, /profile as these are now handled within Dashboard */}
+                  {/* Settings Dropdown - still relevant for global actions like password/account management */}
                   <li className="nav-item dropdown">
                     <a className="nav-link dropdown-toggle custom-nav-link" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                       Settings
                     </a>
                     <ul className="dropdown-menu" aria-labelledby="navbarDropdown">
+                      {/* These routes remain separate as they are global account actions, not dashboard specific views */}
                       <li><Link className="dropdown-item" to="/change-password">Change Password</Link></li>
                       <li><Link className="dropdown-item" to="/delete-account">Delete Account</Link></li>
                       {user?.role === 'admin' && (
@@ -180,7 +165,7 @@ function AppContent() {
         </div>
       </nav>
 
-      <div className="container mt-4">
+      <div className="container mt-4 flex-grow-1"> {/* Added flex-grow-1 here */}
         <Routes>
           {/* Public Routes */}
           <Route path="/register" element={<Register />} />
@@ -190,18 +175,17 @@ function AppContent() {
           {/* Root path now uses the redirection helper component */}
           <Route path="/" element={<RedirectToAuthPage />} />
 
-          {/* Protected Routes - wrapped with ProtectedRoute */}
+          {/* Protected Routes - dashboard itself */}
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          <Route path="/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
-          <Route path="/profile/:userId?" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+
+          {/* Global account management routes, still protected individually */}
           <Route path="/change-password" element={<ProtectedRoute><ChangePassword /></ProtectedRoute>} />
           <Route path="/delete-account" element={<ProtectedRoute><DeleteAccount /></ProtectedRoute>} />
-          <Route path="/reading-list" element={<ProtectedRoute><BookList /></ProtectedRoute>} />
 
           {/* Admin Protected Route */}
           <Route path="/admin-dashboard" element={
-            <ProtectedRoute>
-              {user?.role === 'admin' ? <AdminDashboard /> : <Dashboard />}
+            <ProtectedRoute adminOnly={true}> {/* Use adminOnly prop */}
+              <AdminDashboard />
             </ProtectedRoute>
           } />
 
